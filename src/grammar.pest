@@ -1,0 +1,29 @@
+//
+// Created by intellij-pest on 2022-05-02
+// grammar
+// Author: hannes
+//
+
+string = {(ASCII_ALPHANUMERIC | "_")+}
+whitespace = {((" ") | NEWLINE | "\t")+}
+
+command_type = {"parent" | "child"}
+
+function_name = {"\"" ~ string ~ "\""}
+functions = {(function_name ~ "," ~ whitespace?)+ | extra_command}
+extra_command = {"{" ~ whitespace? ~ command ~ whitespace? ~ "}"}
+
+where_filter = {whitespace? ~ "where"  ~ whitespace? ~ params}
+attribute = {string}
+value = {string}
+filter = {attribute ~ whitespace? ~ "=" ~ whitespace? ~ "\"" ~ value ~ "\""}
+macro_filter = {"@" ~ (macro_new | string)}
+macro_new = {"new:" ~ macro_name ~ "(" ~ (filter | (filter ~ "," ~ whitespace?)+) ~ ")"}
+macro_name = {string}
+params = {macro_filter | filter | (filter ~ "," ~ whitespace?)+ }
+
+overwrite = {whitespace? ~ "as"  ~ whitespace? ~ overwrite_name}
+overwrite_name = {"\"" ~ string ~ "\""}
+
+command = {command_type ~ whitespace? ~ "of" ~ whitespace? ~ (function_name | functions) ~ (where_filter)? ~ (overwrite)?}
+

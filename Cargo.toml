@@ -6,3 +6,22 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rand = "0.8.3"
+pest = "2.1.1"
+pest_derive = "2.0"
+json = "0.12.4"
+arbitrary = { version = "1", optional = true, features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+lsp-types = "0.73.0"
+url = "2.1.1"
+log = { version = "0.4", features = ["max_level_trace"]}
+stderrlog = "0.4"
+structopt = "0.3"
+petgraph = "0.5"
+juniper = "0.14.2"
+actix-web = "2.0"
+actix-rt = "1.0"
+actix-server = "1.0.2"
+actix-files = "0.2.1"
+futures = "0.3"
