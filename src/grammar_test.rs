@@ -7,8 +7,7 @@ use std::collections::HashMap;
 #[test]
 fn test_grammar_simple1() {
     let input = r#"parent of "func1""#;
-    let parser = parser::parser{ map: HashMap::new() };
-    let pair: Pair<parser::Rule> = parser.parse_grammar(input.to_string());
+    let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
@@ -29,8 +28,7 @@ fn test_grammar_simple1() {
 #[test]
 fn test_grammar_simple2() {
     let input = r#"child of "func2""#;
-    let parser = parser::parser{ map: HashMap::new() };
-    let pair: Pair<parser::Rule> = parser.parse_grammar(input.to_string());
+    let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
@@ -51,8 +49,7 @@ fn test_grammar_simple2() {
 #[test]
 fn test_grammar1() {
     let input = r#"parent of "func1" where file="123""#;
-    let parser = parser::parser{ map: HashMap::new() };
-    let pair: Pair<parser::Rule> = parser.parse_grammar(input.to_string());
+    let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
@@ -77,8 +74,7 @@ fn test_grammar1() {
 #[test]
 fn test_grammar2() {
     let input = r#"parent of "func2" as "function_x""#;
-    let parser = parser::parser{ map: HashMap::new() };
-    let pair: Pair<parser::Rule> = parser.parse_grammar(input.to_string());
+    let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
@@ -103,8 +99,7 @@ fn test_grammar2() {
 #[test]
 fn test_grammar_complex1() {
     let input = r#"parent of {parent of "func1" where @new:filter(file = "abc")} where @filter"#;
-    let parser = parser::parser{ map: HashMap::new() };
-    let pair: Pair<parser::Rule> = parser.parse_grammar(input.to_string());
+    let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {

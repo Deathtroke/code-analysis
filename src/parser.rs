@@ -10,26 +10,26 @@ use super::*;
 struct MyParser;
 
 pub struct parser {
-    pub map :HashMap<String, String>
+    pub graph :Vec<(String, String)>
+}
+
+pub fn parse_grammar(input: &str) -> Pair<Rule> {
+    let pair = MyParser::parse(Rule::command, input)
+        .expect("unsuccessful parse")
+        .next().unwrap();
+    pair
 }
 
 impl parser {
-    pub fn parse_grammar(&self, input: String) -> Pair<Rule> {
-        let pair = MyParser::parse(Rule::command, input.to_owned().as_str())
-            .expect("unsuccessful parse")
-            .next().unwrap();
-        pair
-    }
 
-    pub fn parse(&mut self, input: String) {
-        let pair = MyParser::parse(Rule::command, input.to_owned().as_str())
-            .expect("unsuccessful parse")
-            .next().unwrap();
-        self.parse_command(pair);
+
+    pub fn parse(&mut self, input: &str) -> Vec<String>{
+        let pair = parse_grammar(input);
+        self.parse_command(pair)
     }
 
     fn parse_command(&mut self, pair: Pair<Rule>) -> Vec<String> {
-        let mut function_names: Vec<String> = Vec::new();
+        let mut function_names: Vec<String> = vec!["".to_string()];
         let mut overwrite_name : String = "".to_string();
         let mut search_parent = false; //false = search for child | true = search for parents
         for inner_pair in pair.to_owned().into_inner() {
@@ -46,7 +46,14 @@ impl parser {
                     };
                 }
                 Rule::function_name => {
-                    function_names[0] = inner_pair.to_string();
+                    for function_nam_pair in inner_pair.into_inner() {
+                        match function_nam_pair.as_rule() {
+                            Rule::string => {
+                                function_names[0] = function_nam_pair.as_str().to_string();
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 Rule::functions => {
                     function_names = self.parse_function(inner_pair);
@@ -67,23 +74,26 @@ impl parser {
                 _ => {}
             }
         }
+        let mut output: Vec<String> = Vec::new();
         for name in function_names {
             if search_parent {
-                function_names.append(&mut self.search_parent(name, overwrite_name));
+                let mut parents = self.search_parent(name.clone(), overwrite_name.clone());
+                output.append(&mut parents);
             } else {
-                function_names.append(&mut self.search_child(name, overwrite_name));
+                let mut child = self.search_child(name.clone(), overwrite_name.clone());
+                output.append(&mut child);
             }
         }
-        function_names
+        output
     }
 
     fn search_parent(&mut self, search_target: String, overwrite_name: String)  -> Vec<String>{
         let parents :Vec<String> = searcher::search_parents(); //TODO this is only a dummy function
-        for parent in parents {
+        for parent in parents.clone() {
             if overwrite_name == "" {
-                self.map.insert(search_target.to_owned(), parent);
+                self.graph.push((parent, search_target.clone()));
             } else {
-                self.map.insert(overwrite_name.to_owned(), parent);
+                self.graph.push((parent, overwrite_name.clone()));
             }
 
         }
@@ -92,11 +102,11 @@ impl parser {
 
     fn search_child(&mut self, search_target: String, overwrite_name: String)  -> Vec<String>{
         let children :Vec<String> = searcher::search_children(); //TODO this is only a dummy function
-        for child in children {
+        for child in children.clone() {
             if overwrite_name == "" {
-                self.map.insert(search_target.to_string().to_owned(), child);
+                self.graph.push((search_target.clone(), child));
             } else {
-                self.map.insert(overwrite_name.to_string().to_owned(), child);
+                self.graph.push((overwrite_name.clone(), child));
             }
 
         }
