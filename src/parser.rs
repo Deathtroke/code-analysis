@@ -4,7 +4,12 @@ use pest::iterators::Pair;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::string::String;
+use graphviz_rust::{exec, parse};
+use dot_structures::*;
+use dot_generator::*;
 use super::*;
+use graphviz_rust::printer::PrinterContext;
+use graphviz_rust::cmd::{CommandArg, Format};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -77,7 +82,7 @@ impl parser {
         }
         let mut output: HashSet<String> = HashSet::new();
         for name in function_names {
-            let mut result;
+            let result;
             if search_parent {
                 result = self.search_parent(name.clone(), overwrite_name.clone());
             } else {
@@ -123,9 +128,7 @@ impl parser {
     }
 
     fn parse_function(&mut self, pair: Pair<Rule>)  -> HashSet<String>{
-        println!("x {:?}", pair);
         let mut function_names: HashSet<String> = HashSet::new();
-        let mut i = 0;
         for functions_pair in pair.into_inner() {
             match functions_pair.as_rule() {
                 Rule::extra_command => {
@@ -141,11 +144,32 @@ impl parser {
                 }
                 Rule::function_name => {
                     function_names.insert(functions_pair.to_string());
-                    i += 1;
                 }
                 _ => {}
             }
         }
         function_names
+    }
+
+    pub fn graph_to_DOT(&mut  self) -> String {
+        let mut g = "digraph G { \n".to_string();
+        for edge in &self.graph {
+            g.push_str(edge.0.as_str());
+            g.push_str(" -> ");
+            g.push_str(edge.1.as_str());
+            g.push_str(";\n");
+        }
+        g.push_str("}");
+        g
+
+    }
+
+    pub fn graph_to_file(&mut self) {
+        let DOT_graph = self.graph_to_DOT();
+        let g: Graph = parse(DOT_graph.as_str()).unwrap();
+        println!("{:?}", exec(g, &mut PrinterContext::default(), vec![
+            CommandArg::Format(Format::Svg),
+            CommandArg::Output("graph.svg".to_string())
+        ]).err());
     }
 }
