@@ -4,19 +4,22 @@ use pest::iterators::Pair;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::string::String;
-use graphviz_rust::{exec, parse};
+use graphviz_rust::{exec, parse, print};
 use dot_structures::*;
 use dot_generator::*;
+use graphviz_rust::attributes::packmode::graph;
 use super::*;
 use graphviz_rust::printer::PrinterContext;
 use graphviz_rust::cmd::{CommandArg, Format};
+use crate::lang_server::LanguageServer;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct MyParser;
 
 pub struct parser {
-    pub graph :HashSet<(String, String)>
+    pub graph :HashSet<(String, String)>,
+    lang_server : Box<dyn LanguageServer>
 }
 
 pub fn parse_grammar(input: &str) -> Pair<Rule> {
@@ -27,7 +30,19 @@ pub fn parse_grammar(input: &str) -> Pair<Rule> {
 }
 
 impl parser {
-
+    pub fn new() -> parser {
+        let mut p = parser{
+            graph:HashSet::new(),
+            lang_server: lang_server::LanguageServerLauncher::new()
+                .server("/usr/bin/clangd".to_owned())
+                .project("/Users/hannes.boerner/Downloads/criu-criu-dev".to_owned())
+                //.languages(language_list)
+                .launch()
+                .expect("Failed to spawn clangd")
+        };
+        p.lang_server.initialize();
+        p
+    }
 
     pub fn parse(&mut self, input: &str) -> HashSet<String>{
         let pair = parse_grammar(input);
@@ -99,7 +114,7 @@ impl parser {
         #[cfg(test)]
             let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
         #[cfg(not(test))]
-            let parents :HashSet<String> = searcher::search_parents(); //TODO this is only a dummy function
+            let parents :HashSet<String> = self.search_parents(search_target.clone());
         for parent in parents.clone() {
             if overwrite_name == "" {
                 self.graph.insert((parent, search_target.clone()));
@@ -115,7 +130,7 @@ impl parser {
         #[cfg(test)]
             let children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
         #[cfg(not(test))]
-            let children :HashSet<String> = searcher::search_children(); //TODO this is only a dummy function
+            let children :HashSet<String> = self.search_children(search_target.clone());
         for child in children.clone() {
             if overwrite_name == "" {
                 self.graph.insert((search_target.clone(), child));
@@ -171,5 +186,85 @@ impl parser {
             CommandArg::Format(Format::Svg),
             CommandArg::Output("graph.svg".to_string())
         ]).err());
+    }
+
+    fn search_parents(&mut self, function_name: String) -> HashSet<String>{
+        let mut result: HashSet<String> = HashSet::new();
+        let mut doc_symbol_vec: Vec<DocumentSymbol> = Vec::new();
+        let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
+        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+        match doc_symbol.clone() {
+            Some(DocumentSymbolResponse::Flat(_)) => {
+                println!("unsupported symbols found");
+            },
+            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                for symbol in doc_symbols {
+                    //println!("1{:?}", symbol.clone());
+                    if symbol.kind == lsp_types::SymbolKind::Function {
+                        println!("2{:?}", symbol.clone());
+                        if !symbol.children.is_none() {
+                            println!("3{:?}", symbol.children.clone());
+                            let children = symbol.children.clone().unwrap();
+                            for child in children {
+                                if child.name == function_name {
+                                    doc_symbol_vec[0] = symbol.clone();
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            None => {
+                println!("no symbols found");
+            }
+        }
+
+        if doc_symbol_vec.len() != 0 {
+            let doc_symbol = doc_symbol_vec[0].clone();
+            for parent in doc_symbol.children.unwrap() {
+                result.insert(parent.name);
+            }
+        }
+
+        result
+    }
+
+    fn search_children(&mut self, function_name: String) -> HashSet<String>{
+        let mut result: HashSet<String> = HashSet::new();
+        let mut doc_symbol_vec: Vec<DocumentSymbol> = Vec::new();
+        let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
+        println!("{:?}", document);
+        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+        match doc_symbol.clone() {
+            Some(DocumentSymbolResponse::Flat(_)) => {
+                println!("unsupported symbols found");
+            },
+            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                for symbol in doc_symbols {
+                    println!("{:?}", symbol);
+                    if symbol.name == function_name {
+                        doc_symbol_vec[0] = symbol;
+                    }
+
+                    break;
+
+                }
+            },
+            None => {
+                println!("no symbols found");
+            }
+        }
+
+        if doc_symbol_vec.len() != 0 {
+            let doc_symbol = doc_symbol_vec[0].clone();
+            for child in doc_symbol.children.unwrap() {
+                result.insert(child.name);
+            }
+        }
+
+        result
     }
 }

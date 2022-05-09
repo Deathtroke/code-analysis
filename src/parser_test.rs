@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 #[test]
 fn test_parser_simple1() {
     let input = r#"parent of "func""#;
-    let mut parser = parser::parser{ graph:HashSet::new() };
+    let mut parser = parser::parser::new();
     let parser_output = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([("parent1".to_string(), "func".to_string()), ("parent2".to_string(), "func".to_string())]);
@@ -14,7 +14,7 @@ fn test_parser_simple1() {
 #[test]
 fn test_parser_simple2() {
     let input = r#"child of "func""#;
-    let mut parser = parser::parser{ graph:HashSet::new() };
+    let mut parser = parser::parser::new();
     let parser_output = HashSet::from(["child1".to_string(), "child2".to_string()]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([("func".to_string(), "child1".to_string()), ("func".to_string(), "child2".to_string())]);
@@ -24,7 +24,7 @@ fn test_parser_simple2() {
 #[test]
 fn test_parser() {
     let input = r#"parent of {parent of "func"}"#;
-    let mut parser = parser::parser{ graph:HashSet::new() };
+    let mut parser = parser::parser::new();
     let parser_output = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([

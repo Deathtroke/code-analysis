@@ -5,6 +5,7 @@ use std::process::{Command, Child, Stdio};
 use std::io::{BufReader, BufRead, Read, Write};
 use std::marker::PhantomData;
 use std::fmt;
+use json::Null;
 
 use log;
 use log::{debug, trace};
@@ -353,19 +354,4 @@ impl LanguageServerLauncher {
             Err(Box::new(LspError("Unsupported languages")))
         }
     }
-}
-
-
-
-
-pub fn search_parents() -> HashSet<String>{
-    //TODO
-    let dummy = HashSet::from(["func1".to_string(), "func2".to_string()]);
-    dummy
-}
-
-pub fn search_children() -> HashSet<String>{
-    //TODO
-    let dummy = HashSet::from(["func1".to_string(), "func2".to_string()]);
-    dummy
 }
