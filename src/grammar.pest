@@ -1,31 +1,24 @@
 string = {(ASCII_ALPHANUMERIC | "_" | "/")+}
-whitespace = {((" ") | NEWLINE | "\t")+}
+WHITESPACE = _{((" ") | NEWLINE | "\t")+}
 
 path = {string}
-name = {string}
+command_type = {string}
+define_name = {string}
+id = {string}
+argument = {string}
+attribute = {string}
+value = {string}
 function_name = {"\"" ~ string ~ "\""}
 
-attribute = {"name"|"dir"|"class"|"arguments"|"return-type"}
-value = {string}
+filter = {attribute ~ "=" ~ "\"" ~ value ~ "\""}
 
-filter = {attribute ~ whitespace? ~ "=" ~ whitespace? ~ "\"" ~ value ~ "\""}
-filters = {filter | (filter ~ "," ~ whitespace?)+ }
+definition_argument = {define_name ~ "=" ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")"}
 
-definition = {name ~ whitespace? ~ "=" ~ whitespace? ~ "(" ~ whitespace? ~ filters  ~ whitespace? ~ ")"}
+option = {"@" ~ ((id ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")") | define_name)}
 
-filter_option = {"@filter(" ~ whitespace? ~ filters  ~ whitespace? ~ ")"}
-mark = {"@mark(" ~ whitespace? ~ name ~ whitespace? ~ ")"}
-reference = {"@ref(" ~ whitespace? ~ name ~ whitespace? ~ ")"}
+params = {"#" ~ id ~ "(" ~ (definition_argument|argument) ~ ")"}
 
-option = {(filter_option|reference|name)}
-options = {option | ((option ~ whitespace?)+ ~ option)}
-
-project = {"#project(" ~ whitespace? ~ path ~ whitespace? ~ ")"}
-definitions = {"#define(" ~ whitespace? ~ definition ~ whitespace? ~ ")"}
-
-parent ={"p"|"parent"|"parent of"}
-child = {"c"|"child"|"child of"}
-query = {(parent|child) ~ whitespace? ~ mark? ~ whitespace? ~ "{" ~ whitespace? ~ (options| query| function_name) ~ whitespace? ~ "}"}
+query = {command_type ~ option? ~ "{" ~ (query | option+ | function_name) ~ "}"}
 
 
-command = {project ~ whitespace? ~ definitions? ~ whitespace? ~ query}
+command = {params+ ~ query}
