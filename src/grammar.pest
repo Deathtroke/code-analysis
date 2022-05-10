@@ -1,29 +1,31 @@
-//
-// Created by intellij-pest on 2022-05-02
-// grammar
-// Author: hannes
-//
-
-string = {(ASCII_ALPHANUMERIC | "_")+}
+string = {(ASCII_ALPHANUMERIC | "_" | "/")+}
 whitespace = {((" ") | NEWLINE | "\t")+}
 
-command_type = {"parent" | "child"}
-
+path = {string}
+name = {string}
 function_name = {"\"" ~ string ~ "\""}
-functions = {(function_name ~ "," ~ whitespace?)+ | extra_command}
-extra_command = {"{" ~ whitespace? ~ command ~ whitespace? ~ "}"}
 
-where_filter = {whitespace? ~ "where"  ~ whitespace? ~ params}
-attribute = {string}
+attribute = {"name"|"dir"|"class"|"arguments"|"return-type"}
 value = {string}
+
 filter = {attribute ~ whitespace? ~ "=" ~ whitespace? ~ "\"" ~ value ~ "\""}
-macro_filter = {"@" ~ (macro_new | string)}
-macro_new = {"new:" ~ macro_name ~ "(" ~ (filter | (filter ~ "," ~ whitespace?)+) ~ ")"}
-macro_name = {string}
-params = {macro_filter | filter | (filter ~ "," ~ whitespace?)+ }
+filters = {filter | (filter ~ "," ~ whitespace?)+ }
 
-overwrite = {whitespace? ~ "as"  ~ whitespace? ~ overwrite_name}
-overwrite_name = {"\"" ~ string ~ "\""}
+definition = {name ~ whitespace? ~ "=" ~ whitespace? ~ "(" ~ whitespace? ~ filters  ~ whitespace? ~ ")"}
 
-command = {command_type ~ whitespace? ~ "of" ~ whitespace? ~ (function_name | functions) ~ (where_filter)? ~ (overwrite)?}
+filter_option = {"@filter(" ~ whitespace? ~ filters  ~ whitespace? ~ ")"}
+mark = {"@mark(" ~ whitespace? ~ name ~ whitespace? ~ ")"}
+reference = {"@ref(" ~ whitespace? ~ name ~ whitespace? ~ ")"}
 
+option = {(filter_option|reference|name)}
+options = {option | ((option ~ whitespace?)+ ~ option)}
+
+project = {"#project(" ~ whitespace? ~ path ~ whitespace? ~ ")"}
+definitions = {"#define(" ~ whitespace? ~ definition ~ whitespace? ~ ")"}
+
+parent ={"p"|"parent"|"parent of"}
+child = {"c"|"child"|"child of"}
+query = {(parent|child) ~ whitespace? ~ mark? ~ whitespace? ~ "{" ~ whitespace? ~ (options| query| function_name) ~ whitespace? ~ "}"}
+
+
+command = {project ~ whitespace? ~ definitions? ~ whitespace? ~ query}
