@@ -10,13 +10,13 @@ function_name = {string}
 
 filter = {attribute ~ "=" ~ "reg"? ~ "\"" ~ value ~ "\""}
 
-
 definition_argument = {define_name ~ "=" ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")"}
-params = {"#" ~ id ~ "(" ~ (definition_argument|argument) ~ ")"}
 
 option = {"@" ~ ((id ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")") | define_name)}
+
+params = {"#" ~ id ~ "(" ~ (definition_argument|argument) ~ ")"}
 
 function_identifier = {(query | option+ | function_name)}
 query = {(option+ | function_name ~ option*) ~ "{" ~ function_identifier+ ~ "}"}
 
-command = {params+ ~ (option+ | function_name) ~ "{" ~ function_identifier ~ ("," ~ function_identifier)+ ~ "}"}
+command = {params* ~ (option+ | function_name) ~ "{" ~ function_identifier+ ~ "}"}
