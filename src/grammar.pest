@@ -1,22 +1,25 @@
 string = ${(ASCII_ALPHANUMERIC | "_" | "/" |"*")+}
 WHITESPACE = _{((" ") | NEWLINE | "\t")+}
 
-define_name = {string}
-id = {string}
+identifier = {ASCII_ALPHA ~ string}
+predefined_identifier = {ASCII_ALPHA ~ string}
 argument = {string}
 attribute = {string}
 value = {string}
 function_name = {string}
 
-filter = {attribute ~ "=" ~ "reg"? ~ "\"" ~ value ~ "\""}
+named_parameter = {attribute ~ "=" ~ "reg"? ~ "\"" ~ value ~ "\""}
 
-definition_argument = {define_name ~ "=" ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")"}
+new_variable = {identifier ~ "=" ~ "(" ~ named_parameter ~ ("," ~ named_parameter)*  ~ ")"}
 
-option = {"@" ~ ((id ~ "(" ~ filter ~ ("," ~ filter)*  ~ ")") | define_name)}
+option = {"@" ~ ((predefined_identifier ~ "(" ~ named_parameter ~ ("," ~ named_parameter)*  ~ ")") | identifier)}
+global_filter = {"#" ~ predefined_identifier ~ "(" ~ (new_variable|argument) ~ ")"}
 
-params = {"#" ~ id ~ "(" ~ (definition_argument|argument) ~ ")"}
+function_filter = {(option | function_name) ~ option*}
 
-function_identifier = {(query | option+ | function_name)}
-query = {(option+ | function_name ~ option*) ~ "{" ~ function_identifier+ ~ "}"}
+next_level = {"{" ~ (queries ~ ";")? ~"}"}
 
-command = {params* ~ (option+ | function_name) ~ "{" ~ function_identifier+ ~ "}"}
+query = {function_filter ~ next_level?}
+queries = {query ~ (";" ~ query)*}
+
+command = {global_filter* ~ queries}
