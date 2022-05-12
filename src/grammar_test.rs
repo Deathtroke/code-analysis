@@ -6,18 +6,46 @@ use std::collections::HashMap;
 
 #[test]
 fn test_grammar_simple1() {
-    let input = r#"parent of "func1""#;
+    let input = r#"@any{foo;};"#;
     let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            parser::Rule::command_type => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), "parent");
-            }
-            parser::Rule::function_name => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), r#""func1""#);
+            parser::Rule::requests => {
+                for requests in inner_pair.into_inner() {
+                    match requests.as_rule() {
+                        parser::Rule::request_expr => {
+                            for request_expr in requests.into_inner() {
+                                match request_expr.as_rule() {
+                                    parser::Rule::function_filter => {
+                                        i += 1;
+                                        assert_eq!(request_expr.as_str(), "@any");
+                                    }
+                                    parser::Rule::child_expr => {
+                                        for requests2 in request_expr.into_inner() {
+                                            match requests2.as_rule() {
+                                                parser::Rule::requests => {
+                                                    for request_expr2 in requests2.into_inner() {
+                                                        match request_expr2.as_rule() {
+                                                            parser::Rule::request_expr => {
+                                                                i += 1;
+                                                                assert_eq!(request_expr2.as_str(), "foo");
+                                                            }
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         }
@@ -27,18 +55,32 @@ fn test_grammar_simple1() {
 
 #[test]
 fn test_grammar_simple2() {
-    let input = r#"child of "func2""#;
+    let input = r#"foo{}"#;
     let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            parser::Rule::command_type => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), "child");
-            }
-            parser::Rule::function_name => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), r#""func2""#);
+            parser::Rule::requests => {
+                for requests in inner_pair.into_inner() {
+                    match requests.as_rule() {
+                        parser::Rule::request_expr => {
+                            for request_expr in requests.into_inner() {
+                                match request_expr.as_rule() {
+                                    parser::Rule::function_filter => {
+                                        i += 1;
+                                        assert_eq!(request_expr.as_str(), "foo");
+                                    }
+                                    parser::Rule::child_expr => {
+                                        i += 1;
+                                        assert_eq!(request_expr.as_str(), "{}");
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         }
@@ -48,29 +90,68 @@ fn test_grammar_simple2() {
 
 #[test]
 fn test_grammar1() {
-    let input = r#"parent of "func1" where file="123""#;
+    let input =
+        r#"foo {
+  bar {
+  };
+};"#;
     let pair: Pair<parser::Rule> = parser::parse_grammar(input);
     let mut i = 0;
     for inner_pair in pair.into_inner() {
         match inner_pair.as_rule() {
-            parser::Rule::command_type => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), "parent");
-            }
-            parser::Rule::function_name => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), r#""func1""#);
-            }
-            parser::Rule::where_filter => {
-                i+=1;
-                assert_eq!(inner_pair.as_str(), r#" where file="123""#);
+            parser::Rule::requests => {
+                for requests in inner_pair.into_inner() {
+                    match requests.as_rule() {
+                        parser::Rule::request_expr => {
+                            for request_expr in requests.into_inner() {
+                                match request_expr.as_rule() {
+                                    parser::Rule::function_filter => {
+                                        i += 1;
+                                        assert_eq!(request_expr.as_str(), "foo ");
+                                    }
+                                    parser::Rule::child_expr => {
+                                        for child_expr in request_expr.into_inner() {
+                                            match child_expr.as_rule() {
+                                                parser::Rule::requests => {
+                                                    for request2 in child_expr.into_inner() {
+                                                        match request2.as_rule() {
+                                                            parser::Rule::request_expr => {
+                                                                for request_expr2 in request2.into_inner() {
+                                                                    match request_expr2.as_rule() {
+                                                                        parser::Rule::function_filter => {
+                                                                            i += 1;
+                                                                            assert_eq!(request_expr2.as_str(), "bar ");
+                                                                        }
+                                                                        parser::Rule::child_expr => {
+                                                                            i += 1;
+                                                                            assert_eq!(request_expr2.as_str(), "{\n  }");
+                                                                        }
+                                                                        _ => {}
+                                                                    }
+                                                                }
+                                                            }
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
             }
             _ => {}
         }
     }
     assert_eq!(i, 3);
 }
-
+/*
 #[test]
 fn test_grammar2() {
     let input = r#"parent of "func2" as "function_x""#;
@@ -172,4 +253,4 @@ fn test_grammar_complex1() {
         }
     }
     assert_eq!(i, 5);
-}
+}*/

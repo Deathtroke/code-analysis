@@ -28,7 +28,7 @@ pub fn parse_grammar(input: &str) -> Pair<Rule> {
         .next().unwrap();
     pair
 }
-
+/*
 impl parser {
     pub fn new() -> parser {
         let mut p = parser{
@@ -55,7 +55,7 @@ impl parser {
         let mut search_parent = false; //false = search for child | true = search for parents
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
-                Rule::command_type => {
+                Rule::requests => {
                     match inner_pair.as_str() {
                         "parent" => {
                             search_parent = true;
@@ -267,4 +267,4 @@ impl parser {
 
         result
     }
-}
+}*/

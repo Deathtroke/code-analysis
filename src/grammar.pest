@@ -1,12 +1,12 @@
 string = ${(ASCII_ALPHANUMERIC | "_" | "/" |"*")+}
 WHITESPACE = _{((" ") | NEWLINE | "\t")+}
 
-identifier = {ASCII_ALPHA ~ string}
-predefined_identifier = {ASCII_ALPHA ~ string}
-argument = {string}
-attribute = {string}
-value = {string}
-function_name = {string}
+identifier = ${ASCII_ALPHA ~ string}
+predefined_identifier = ${ASCII_ALPHA ~ string}
+argument = ${string}
+attribute = ${string}
+value = ${string}
+function_name = ${string}
 
 named_parameter = {attribute ~ "=" ~ "regex"? ~ "\"" ~ value ~ "\""}
 
