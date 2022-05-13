@@ -1,25 +1,8 @@
-string = ${(ASCII_ALPHANUMERIC | "_" | "/" |"*")+}
-WHITESPACE = _{((" ") | NEWLINE | "\t")+}
-
-identifier = ${ASCII_ALPHA ~ string}
-predefined_identifier = ${ASCII_ALPHA ~ string}
-argument = ${string}
-attribute = ${string}
-value = ${string}
-function_name = ${string}
-
-named_parameter = {attribute ~ "=" ~ "regex"? ~ "\"" ~ value ~ "\""}
-
-define_filter_variable = {identifier ~ "=" ~ "(" ~ named_parameter ~ ("," ~ named_parameter)*  ~ ")"}
-
-filter_option = {"@" ~ ((predefined_identifier ~ "(" ~ named_parameter ~ ("," ~ named_parameter)*  ~ ")") | identifier)}
-global_definition = {"#" ~ predefined_identifier ~ "(" ~ (define_filter_variable | argument) ~ ")"}
-
-function_filter = {(filter_option | function_name) ~ filter_option*}
-
-child_expr = {"{" ~ (requests ~ ";")? ~"}"}
-
-request_expr = {function_filter ~ child_expr?}
-requests = {request_expr ~ (";" ~ request_expr)*}
-
-command = {global_definition* ~ requests}
+COMMENT = _{ "NB." ~ (!"\n" ~ ANY)* }
+WHITESPACE = _{((" ")  | "\t")+}
+ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | " ")*}
+verb = @{ "@" ~ident}
+scope = { "{" ~ statements ~ "}" }
+statement = {verb+ ~ scope?}
+statements = { NEWLINE* ~ (statement ~ (";" | NEWLINE)+)* ~ statement? }
+query = _{SOI ~ "\n"* ~ statements ~ EOI }
