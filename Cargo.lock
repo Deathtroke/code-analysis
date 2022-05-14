@@ -23,6 +23,7 @@ dependencies = [
  "pest_derive",
  "petgraph",
  "rand 0.8.5",
+ "regex",
  "serde",
  "serde_json",
  "stderrlog",

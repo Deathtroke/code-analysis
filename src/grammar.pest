@@ -3,6 +3,6 @@ WHITESPACE = _{((" ")  | "\t")+}
 ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | " ")*}
 verb = @{ "@" ~ident}
 scope = { "{" ~ statements ~ "}" }
-statement = {verb+ ~ scope?}
+statement = {verb* ~ scope?}
 statements = { NEWLINE* ~ (statement ~ (";" | NEWLINE)+)* ~ statement? }
 query = _{SOI ~ "\n"* ~ statements ~ EOI }
