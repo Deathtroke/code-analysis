@@ -16,5 +16,5 @@ fn main() {/*
 
 
 #[cfg(test)]
-mod grammar_test;/*
-mod parser_test;*/
+mod grammar_test;
+mod parser_test;

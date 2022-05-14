@@ -239,9 +239,8 @@ fn test_grammar_complex1() {
                                                             }
                                                             parser::Rule::scope => {
                                                                 i += 1;
-                                                                let re = Regex::new(r"\{([ \n])*\}").unwrap();
+                                                                let re = Regex::new(r"\{([ \n])*}").unwrap();
                                                                 assert!(re.is_match(statement2.as_str()));
-                                                                //assert_eq!(statement2.as_str(), "{}");
                                                             }
                                                             _ => {}
                                                         }
