@@ -1,3 +1,4 @@
+use std::any::Any;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::Pair;
@@ -19,7 +20,7 @@ struct MyParser;
 
 pub struct parser {
     pub graph :HashSet<(String, String)>,
-    //lang_server : Box<dyn LanguageServer>,
+    lang_server : Box<dyn LanguageServer>,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
     //global_filter :HashSet<(String, String)>
 }
@@ -35,16 +36,16 @@ impl parser {
     pub fn new() -> parser {
         let mut p = parser{
             graph:HashSet::new(),
-            //lang_server: lang_server::LanguageServerLauncher::new()
-            //    .server("/usr/bin/clangd".to_owned())
-            //    .project("/Users/hannes.boerner/Downloads/criu-criu-dev".to_owned())
-            //    //.languages(language_list)
-            //    .launch()
-            //    .expect("Failed to spawn clangd")
+            lang_server: lang_server::LanguageServerLauncher::new()
+                .server("/usr/bin/clangd".to_owned())
+                .project("/Users/hannes.boerner/Downloads/criu-criu-dev".to_owned())
+                //.languages(language_list)
+                .launch()
+                .expect("Failed to spawn clangd")
             //global_vars:HashSet::new(),
             //global_filter:HashSet::new()
         };
-        //p.lang_server.initialize();
+        p.lang_server.initialize();
         p
     }
 
@@ -62,38 +63,9 @@ impl parser {
                 Rule::statement =>{
                     function_names = self.parse_statement(inner_pair,function_names.clone());
                 }
-                /*
-                Rule::function_name => {
-                    for function_nam_pair in inner_pair.into_inner() {
-                        match function_nam_pair.as_rule() {
-                            Rule::string => {
-                                function_names.insert(function_nam_pair.as_str().to_string());
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                Rule::functions => {
-                    function_names = self.parse_function(inner_pair);
-                }
-                Rule::where_filter => {
-
-                }
-                Rule::overwrite => {
-                    for overwirde_pair in inner_pair.into_inner() {
-                        match overwirde_pair.as_rule() {
-                            Rule::overwrite_name => {
-                                overwrite_name = overwirde_pair.to_string();
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                */
                 _ => {}
             }
         }
-        let mut output: HashSet<String> = HashSet::new();
         function_names
     }
 
@@ -207,54 +179,6 @@ impl parser {
         parents
     }
 /*
-    fn parse_requests(&mut self, pair: Pair<Rule>) {
-        let mut child_filter: HashSet<(String, String)> = HashSet::new();
-        let mut parent_filter: HashSet<(String, String)> = HashSet::new();
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::request_expr => {
-                    let mut found_function_filter = false;
-                    let mut found_child_expr = false;
-                    let mut specified_child_expr = false;
-                    for inner_pair in pair.to_owned().into_inner() {
-                        match inner_pair.as_rule() {
-                            Rule::function_filter => {
-                                //Parent
-                                found_function_filter = true;
-                                for function_filter in inner_pair.into_inner() {
-                                    match function_filter.as_rule() {
-                                        Rule::function_name => {
-                                            parent_filter.insert(("name".to_string(), function_filter.to_string()));
-                                        }
-                                        Rule::filter_option => {
-                                            self.parse_filter_option(function_filter);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            Rule::function_filte => {
-                                //Child
-                                found_child_expr = true;
-                                for child_expr in inner_pair.into_inner() {
-                                    match child_expr.as_rule() {
-                                        Rule::requests => {
-                                            specified_child_expr = true;
-                                            self.parse_requests(child_expr);
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
     fn parse_filter_option(&mut self, pair: Pair<Rule>, mut filter: HashSet<(String, String)>){
         let mut predefined_identifier_text = "";
         for inner_pair in pair.to_owned().into_inner() {
@@ -318,30 +242,6 @@ impl parser {
         result
     }
 
-    /*fn parse_function(&mut self, pair: Pair<Rule>)  -> HashSet<String>{
-        let mut function_names: HashSet<String> = HashSet::new();
-        for functions_pair in pair.into_inner() {
-            match functions_pair.as_rule() {
-                Rule::extra_command => {
-                    //filter out {, } and whitespaces so only the next command can
-                    for extra_command_pair in functions_pair.into_inner() {
-                        match extra_command_pair.as_rule() {
-                            Rule::command => {
-                                function_names = self.parse_command(extra_command_pair);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                Rule::function_name => {
-                    function_names.insert(functions_pair.to_string());
-                }
-                _ => {}
-            }
-        }
-        function_names
-    }*/
-
     pub fn graph_to_DOT(&mut  self) -> String {
         let mut g = "digraph G { \n".to_string();
         for edge in &self.graph {
@@ -363,20 +263,26 @@ impl parser {
             CommandArg::Output("graph.svg".to_string())
         ]).err());
     }
-    /*
+
     fn search_parents(&mut self, function_name: String) -> HashSet<String>{
+        println!("1");
         let mut result: HashSet<String> = HashSet::new();
         let mut doc_symbol_vec: Vec<DocumentSymbol> = Vec::new();
         let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+        println!("document: {:?}", document);
+        //println!("{}",document.text);
+        println!("{}",document.uri);
 
-        match doc_symbol.clone() {
+        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+        println!("doc_symbol: {:?}", doc_symbol);
+
+        match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
                 println!("unsupported symbols found");
             },
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
-                    //println!("1{:?}", symbol.clone());
+                    println!("1{:?}", symbol.clone().type_id());
                     if symbol.kind == lsp_types::SymbolKind::Function {
                         println!("2{:?}", symbol.clone());
                         if !symbol.children.is_none() {
@@ -442,5 +348,5 @@ impl parser {
         }
 
         result
-    }*/
+    }
 }

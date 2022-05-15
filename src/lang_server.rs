@@ -315,6 +315,16 @@ impl LanguageServer for ClangdLanguageServer {
         });
         self.request(params)
     }
+/*
+    fn call_hierarchy(&mut self, document: &TextDocumentItem) -> Result<Option<DocumentSymbolResponse>, Error> {
+        let params = Request::<DocumentSymbolRequest>::new(DocumentSymbolParams {
+            text_document: TextDocumentIdentifier{
+                uri: document.uri.clone(),
+            },
+        });
+        self.request(params)
+    }
+    */
 }
 
 pub struct LanguageServerLauncher {

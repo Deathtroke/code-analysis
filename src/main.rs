@@ -7,11 +7,11 @@ use lsp_types::request::Request as LspRequest;
 mod parser;
 mod lang_server;
 
-fn main() {/*
-    let input = r#"parent of "INIT_LIST_HEAD""#;
+fn main() {
+    let input = r#"{@INIT_LIST_HEAD}"#;
     let mut parser = parser::parser::new();
     let functions = parser.parse(input);
-    println!("{:?}", functions);*/
+    println!("{:?}", functions);
 }
 
 
