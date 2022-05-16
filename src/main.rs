@@ -8,10 +8,14 @@ mod parser;
 mod lang_server;
 
 fn main() {
-    let input = r#"{@INIT_LIST_HEAD}"#;
-    let mut parser = parser::parser::new();
+    let project_path = "/Users/hannes.boerner/Downloads/criu-criu-dev".to_string();
+    let input = r#"{@fanotify_resolve_remap}"#;
+    let mut parser = parser::parser::new(project_path);
+
     let functions = parser.parse(input);
     println!("{:?}", functions);
+
+    println!("{}", parser.graph_to_DOT())
 }
 
 

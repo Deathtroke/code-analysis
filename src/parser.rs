@@ -33,12 +33,12 @@ pub fn parse_grammar(input: &str) -> Pair<Rule> {
 }
 
 impl parser {
-    pub fn new() -> parser {
+    pub fn new(project_path: String) -> parser {
         let mut p = parser{
             graph:HashSet::new(),
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server("/usr/bin/clangd".to_owned())
-                .project("/Users/hannes.boerner/Downloads/criu-criu-dev".to_owned())
+                .project(project_path.to_owned())
                 //.languages(language_list)
                 .launch()
                 .expect("Failed to spawn clangd")
@@ -264,17 +264,12 @@ impl parser {
         ]).err());
     }
 
-    fn search_parents(&mut self, function_name: String) -> HashSet<String>{
-        println!("1");
+    fn search_parents(&mut self, function_name: String) -> HashSet<String> {
+        //println!("parent");
         let mut result: HashSet<String> = HashSet::new();
-        let mut doc_symbol_vec: Vec<DocumentSymbol> = Vec::new();
         let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
-        println!("document: {:?}", document);
-        //println!("{}",document.text);
-        println!("{}",document.uri);
 
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-        println!("doc_symbol: {:?}", doc_symbol);
 
         match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
@@ -282,20 +277,17 @@ impl parser {
             },
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
-                    println!("1{:?}", symbol.clone().type_id());
-                    if symbol.kind == lsp_types::SymbolKind::Function {
-                        println!("2{:?}", symbol.clone());
-                        if !symbol.children.is_none() {
-                            println!("3{:?}", symbol.children.clone());
-                            let children = symbol.children.clone().unwrap();
-                            for child in children {
-                                if child.name == function_name {
-                                    doc_symbol_vec[0] = symbol.clone();
-                                    break;
-                                }
-                            }
+                    //println!("{:?}", symbol);
+                    if symbol.name == function_name {
+                        let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                        let incoming_calls = self.lang_server.call_hierarchy_item_incoming(prep_call_hierarchy.unwrap().unwrap()[0].clone());
+                        //println!("{:?}", incoming_calls);
+                        for incoming_call in incoming_calls.unwrap().unwrap() {
+                            result.insert(incoming_call.from.name.to_string());
                         }
+                        break;
                     }
+
                 }
             },
             None => {
@@ -303,21 +295,13 @@ impl parser {
             }
         }
 
-        if doc_symbol_vec.len() != 0 {
-            let doc_symbol = doc_symbol_vec[0].clone();
-            for parent in doc_symbol.children.unwrap() {
-                result.insert(parent.name);
-            }
-        }
-
         result
     }
 
     fn search_children(&mut self, function_name: String) -> HashSet<String>{
+        //println!("child");
         let mut result: HashSet<String> = HashSet::new();
-        let mut doc_symbol_vec: Vec<DocumentSymbol> = Vec::new();
         let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
-        println!("{:?}", document);
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
         match doc_symbol.clone() {
@@ -326,24 +310,21 @@ impl parser {
             },
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
-                    println!("{:?}", symbol);
+                    //println!("{:?}", symbol);
                     if symbol.name == function_name {
-                        doc_symbol_vec[0] = symbol;
+                        let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                        let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(prep_call_hierarchy.unwrap().unwrap()[0].clone());
+                        //println!("{:?}", outgoing_calls);
+                        for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                            result.insert(outgoing_call.to.name.to_string());
+                        }
+                        break;
                     }
-
-                    break;
 
                 }
             },
             None => {
                 println!("no symbols found");
-            }
-        }
-
-        if doc_symbol_vec.len() != 0 {
-            let doc_symbol = doc_symbol_vec[0].clone();
-            for child in doc_symbol.children.unwrap() {
-                result.insert(child.name);
             }
         }
 

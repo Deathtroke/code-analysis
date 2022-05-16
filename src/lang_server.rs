@@ -9,10 +9,12 @@ use json::Null;
 
 use log;
 use log::{debug, trace};
+use lsp_types::request::{CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare};
 
 use serde::{Serialize, Deserialize};
 use serde_json::json;
 use serde_json;
+//use test::RunIgnored::No;
 
 use super::*;
 
@@ -37,6 +39,9 @@ pub trait LanguageServer : Send {
     fn exit(&mut self) -> Result<(), Error>;
     fn document_open(&mut self, path: &str) -> Result<TextDocumentItem, Error>;
     fn document_symbol(&mut self, document: &TextDocumentItem) -> Result<Option<DocumentSymbolResponse>, Error>;
+    fn call_hierarchy_item(&mut self, document: &TextDocumentItem, position: Position) ->  Result<Option<Vec<CallHierarchyItem>>, Error>;
+    fn call_hierarchy_item_outgoing(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyOutgoingCall>>, Error>;
+    fn call_hierarchy_item_incoming(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyIncomingCall>>, Error>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -220,7 +225,7 @@ impl LanguageServer for ClangdLanguageServer {
     #[allow(deprecated)]
     fn initialize(&mut self) -> Result<InitializeResult, Error> {
         self.request(Request::<Initialize>::new(InitializeParams {
-            process_id: Some(std::process::id() as u64),
+            process_id: Some(std::process::id() as u32),
             root_path: None,
             root_uri: Url::from_file_path(self.project.clone()).ok(),
             initialization_options: None,
@@ -230,36 +235,36 @@ impl LanguageServer for ClangdLanguageServer {
                     ..Default::default()
                 }),
                 text_document: Some(TextDocumentClientCapabilities {
-                    document_symbol: Some(DocumentSymbolCapability {
+                    document_symbol: Some(DocumentSymbolClientCapabilities {
                         hierarchical_document_symbol_support: Some(true),
                         symbol_kind: Some(SymbolKindCapability{
                             value_set: Some(vec![
-                                SymbolKind::File,
-                                SymbolKind::Module,
-                                SymbolKind::Namespace,
-                                SymbolKind::Package,
-                                SymbolKind::Class,
-                                SymbolKind::Method,
-                                SymbolKind::Property,
-                                SymbolKind::Field,
-                                SymbolKind::Constructor,
-                                SymbolKind::Enum,
-                                SymbolKind::Interface,
-                                SymbolKind::Function,
-                                SymbolKind::Variable,
-                                SymbolKind::Constant,
-                                SymbolKind::String,
-                                SymbolKind::Number,
-                                SymbolKind::Boolean,
-                                SymbolKind::Array,
-                                SymbolKind::Object,
-                                SymbolKind::Key,
-                                SymbolKind::Null,
-                                SymbolKind::EnumMember,
-                                SymbolKind::Struct,
-                                SymbolKind::Event,
-                                SymbolKind::Operator,
-                                SymbolKind::TypeParameter,
+                                SymbolKind::FILE,
+                                SymbolKind::MODULE,
+                                SymbolKind::NAMESPACE,
+                                SymbolKind::PACKAGE,
+                                SymbolKind::CLASS,
+                                SymbolKind::METHOD,
+                                SymbolKind::PROPERTY,
+                                SymbolKind::FIELD,
+                                SymbolKind::CONSTRUCTOR,
+                                SymbolKind::ENUM,
+                                SymbolKind::INTERFACE,
+                                SymbolKind::FUNCTION,
+                                SymbolKind::VARIABLE,
+                                SymbolKind::CONSTANT,
+                                SymbolKind::STRING,
+                                SymbolKind::NUMBER,
+                                SymbolKind::BOOLEAN,
+                                SymbolKind::ARRAY,
+                                SymbolKind::OBJECT,
+                                SymbolKind::KEY,
+                                SymbolKind::NULL,
+                                SymbolKind::ENUM_MEMBER,
+                                SymbolKind::STRUCT,
+                                SymbolKind::EVENT,
+                                SymbolKind::OPERATOR,
+                                SymbolKind::TYPE_PARAMETER,
                             ]
                             )
                         }),
@@ -268,11 +273,13 @@ impl LanguageServer for ClangdLanguageServer {
                     ..Default::default()
                 }),
                 window: None,
+                general: None,
                 experimental: None,
             },
             trace: None,
             workspace_folders: None,
             client_info: None,
+            locale: Option::from("de".to_string()),
         }))
     }
 
@@ -312,19 +319,45 @@ impl LanguageServer for ClangdLanguageServer {
             text_document: TextDocumentIdentifier{
                 uri: document.uri.clone(),
             },
-        });
-        self.request(params)
-    }
-/*
-    fn call_hierarchy(&mut self, document: &TextDocumentItem) -> Result<Option<DocumentSymbolResponse>, Error> {
-        let params = Request::<DocumentSymbolRequest>::new(DocumentSymbolParams {
-            text_document: TextDocumentIdentifier{
-                uri: document.uri.clone(),
+            work_done_progress_params: WorkDoneProgressParams{
+                work_done_token: None
+            },
+            partial_result_params: PartialResultParams{
+                partial_result_token: None
             },
         });
         self.request(params)
     }
-    */
+
+    fn call_hierarchy_item(&mut self, document: &TextDocumentItem, position: Position) ->  Result<Option<Vec<CallHierarchyItem>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+        let params = Request::<CallHierarchyPrepare>::new(CallHierarchyPrepareParams {
+            text_document_position_params: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier{
+                    uri: document.uri.clone(),
+                },
+                position },
+            work_done_progress_params: Default::default()
+        });
+        self.request(params)
+    }
+
+    fn call_hierarchy_item_outgoing(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyOutgoingCall>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+        let params = Request::<CallHierarchyOutgoingCalls>::new(CallHierarchyOutgoingCallsParams {
+            item: call_hierarchy_item,
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default()
+        });
+        self.request(params)
+    }
+
+    fn call_hierarchy_item_incoming(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyIncomingCall>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+        let params = Request::<CallHierarchyIncomingCalls>::new(CallHierarchyIncomingCallsParams {
+            item: call_hierarchy_item,
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default()
+        });
+        self.request(params)
+    }
 }
 
 pub struct LanguageServerLauncher {
