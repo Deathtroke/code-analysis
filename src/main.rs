@@ -17,7 +17,7 @@ pub struct Opt {
     query: String,
     #[structopt(short = "o", long = "output-file")]
     output: Option<String>,
-    #[structopt(short = "p", long = "project-path")]
+    #[structopt(short = "p", long = "project-path", default_value = "/Users/hannes.boerner/Downloads/criu-criu-dev")]
     project_path: String,
 }
 

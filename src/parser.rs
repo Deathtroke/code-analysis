@@ -13,6 +13,13 @@ use super::*;
 use graphviz_rust::printer::PrinterContext;
 use graphviz_rust::cmd::{CommandArg, Format};
 use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+
+use std::{thread, time};
+use json::JsonValue::String as OtherString;
+use juniper::GraphQLType;
 
 use crate::lang_server::LanguageServer;
 
@@ -24,6 +31,7 @@ pub struct parser {
     pub graph :HashSet<(String, String)>,
     lang_server : Box<dyn LanguageServer>,
     files_in_project: Vec<String>,
+    project_path: String,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
     //global_filter :HashSet<(String, String)>
 }
@@ -46,7 +54,7 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
             files.append(&mut subfolder);
         } else {
             if path_str.ends_with(".cpp") || path_str.ends_with(".c"){
-                files.push(path_str.replace(project_path.clone().as_str(),"."));
+                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"),""));
             }
         }
     }
@@ -64,6 +72,7 @@ impl parser {
                 .launch()
                 .expect("Failed to spawn clangd"),
             files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
+            project_path,
             //global_vars:HashSet::new(),
             //global_filter:HashSet::new()
         };
@@ -231,7 +240,7 @@ impl parser {
         #[cfg(test)]
             let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
         #[cfg(not(test))]
-            let parents:HashSet<String> = self.search_all_parents(search_target);
+            let parents:HashSet<String> = self.search_all_parents(search_target.clone());
 
         for parent in parents.clone() {
             self.graph.insert((parent, search_target.clone()));
@@ -241,13 +250,32 @@ impl parser {
     }
     fn search_all_parents(&mut self, search_target: String) -> HashSet<String> {
         let mut parents:HashSet<String> = HashSet::new();
-        println!("{}",self.files_in_project.clone().len());
-        for file in self.files_in_project.clone(){
-            let new_parents = self.search_parent_single_document(search_target.clone(), file.as_str());
+        //println!("parent {}",self.files_in_project.clone().len());
+        for file_path in self.files_in_project.clone(){
+            let path = self.project_path.clone() + "/" + file_path.as_str();
+            let mut file = match File::open(&path){
+                Err(why) => panic!("could not open: {}", why),
+                Ok(file) => file
+            };
+            let mut s = String::new();
+            match file.read_to_string(&mut s){
+                Err(why) => panic!("could not read: {}", why),
+                Ok(_) => { }
+            }
 
+            let mut new_parents = HashSet::new();
+            let need_lsp = s.contains(&search_target.clone());
+            //println!("{}", need_lsp);
+            if need_lsp
+            {
+                println!("{}, {}", file_path, search_target.clone());
+                new_parents = self.search_parent_single_document(search_target.clone(), file_path.as_str());
+                println!("{:?}", new_parents);
+            }
             for parent in new_parents {
                 parents.insert(parent);
             }
+            //thread::sleep(time::Duration::from_secs(1));
         }
         parents
     }
@@ -256,7 +284,7 @@ impl parser {
         #[cfg(test)]
             let mut children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
         #[cfg(not(test))]
-            let mut children:HashSet<String> = self.search_all_children(search_target);
+            let mut children:HashSet<String> = self.search_all_children(search_target.clone());
 
         for child in children.clone() {
             self.graph.insert((search_target.clone(), child));
@@ -266,13 +294,32 @@ impl parser {
 
     fn search_all_children(&mut self, search_target: String) -> HashSet<String> {
         let mut children:HashSet<String> = HashSet::new();
-        println!("{}",self.files_in_project.clone().len());
-        for file in self.files_in_project.clone(){
-            let new_children = self.search_child_single_document(search_target.clone(), file.as_str());
+        //println!("child {}",self.files_in_project.clone().len());
+        for file_path in self.files_in_project.clone(){
+            let path = self.project_path.clone() + "/" + file_path.as_str();
+            let mut file = match File::open(&path){
+                Err(why) => panic!("could not open: {}", why),
+                Ok(file) => file
+            };
+            let mut s = String::new();
+            match file.read_to_string(&mut s){
+                Err(why) => panic!("could not read: {}", why),
+                Ok(_) => { }
+            }
 
+            let mut new_children = HashSet::new();
+            let need_lsp = s.contains(&search_target.clone());
+            //println!("{}", need_lsp);
+            if need_lsp
+            {
+                //println!("{}, {}", file_path, search_target.clone());
+                new_children = self.search_child_single_document(search_target.clone(), file_path.as_str());
+                //println!("{:?}", new_children);
+            }
             for child in new_children {
                 children.insert(child);
             }
+            //thread::sleep(time::Duration::from_secs(1));
         }
         children
     }
