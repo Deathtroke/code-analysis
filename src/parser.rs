@@ -229,20 +229,25 @@ impl parser {
 */
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
         #[cfg(test)]
-            let mut parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
+            let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
         #[cfg(not(test))]
-            let mut parents:HashSet<String> = HashSet::new();
-            for file in self.files_in_project.clone(){
-                let new_parents = self.search_parent_single_document(search_target.clone(), file.as_str());
-
-                for parent in new_parents {
-                    parents.insert(parent);
-                }
-            }
+            let parents:HashSet<String> = self.search_all_parents(search_target);
 
         for parent in parents.clone() {
             self.graph.insert((parent, search_target.clone()));
 
+        }
+        parents
+    }
+    fn search_all_parents(&mut self, search_target: String) -> HashSet<String> {
+        let mut parents:HashSet<String> = HashSet::new();
+        println!("{}",self.files_in_project.clone().len());
+        for file in self.files_in_project.clone(){
+            let new_parents = self.search_parent_single_document(search_target.clone(), file.as_str());
+
+            for parent in new_parents {
+                parents.insert(parent);
+            }
         }
         parents
     }
@@ -251,16 +256,23 @@ impl parser {
         #[cfg(test)]
             let mut children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
         #[cfg(not(test))]
-            let mut children:HashSet<String> = HashSet::new();
-            for file in self.files_in_project.clone(){
-                let new_children = self.search_child_single_document(search_target.clone(), file.as_str());
+            let mut children:HashSet<String> = self.search_all_children(search_target);
 
-                for child in new_children {
-                    children.insert(child);
-                }
-            }
         for child in children.clone() {
             self.graph.insert((search_target.clone(), child));
+        }
+        children
+    }
+
+    fn search_all_children(&mut self, search_target: String) -> HashSet<String> {
+        let mut children:HashSet<String> = HashSet::new();
+        println!("{}",self.files_in_project.clone().len());
+        for file in self.files_in_project.clone(){
+            let new_children = self.search_child_single_document(search_target.clone(), file.as_str());
+
+            for child in new_children {
+                children.insert(child);
+            }
         }
         children
     }
