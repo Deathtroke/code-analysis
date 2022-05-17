@@ -15,23 +15,23 @@ mod lang_server;
 pub struct Opt {
     #[structopt(short = "q", long = "query", default_value = r#"{@fanotify_resolve_remap}"#)]
     query: String,
-    #[structopt(short = "o", long = "output-file", default_value = "")]
-    output: String,
+    #[structopt(short = "o", long = "output-file")]
+    output: Option<String>,
+    #[structopt(short = "p", long = "project-path")]
+    project_path: String,
 }
 
 fn main() {
     let opt = Opt::from_args();
 
-    let project_path = "/Users/hannes.boerner/Downloads/criu-criu-dev/criu".to_string();
-
-    let mut parser = parser::parser::new(project_path);
+    let mut parser = parser::parser::new(opt.project_path);
 
     parser.parse(opt.query.as_str());
 
-    println!("{}", parser.graph_to_DOT());
-    if opt.output != ""
-    {
-        parser.graph_to_file(opt.output);
+    if opt.output.is_some() {
+        parser.graph_to_file(opt.output.unwrap());
+    } else {
+        println!("{}", parser.graph_to_DOT());
     }
 }
 
