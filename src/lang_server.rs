@@ -57,7 +57,7 @@ impl<T: LspRequest> Request<T> {
         Request {
             jsonrpc: "2.0".to_string(),
             id: 0,
-            params: params,
+            params,
             _action: PhantomData,
         }
     }
@@ -300,7 +300,7 @@ impl LanguageServer for ClangdLanguageServer {
         let uri = self.uri(path);
         let contents = fs::read_to_string(self.full_path(path))?;
         let document = TextDocumentItem {
-            uri: uri,
+            uri,
             language_id: self.lang.clone(),
             version: 1,
             text: contents,

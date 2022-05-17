@@ -231,7 +231,15 @@ impl parser {
         #[cfg(test)]
             let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
         #[cfg(not(test))]
-            let parents :HashSet<String> = self.search_parents(search_target.clone());
+            let mut parents:HashSet<String> = HashSet::new();
+            for file in self.files_in_project.clone(){
+                let new_parents = self.search_parent_single_document(search_target.clone(), file.as_str());
+
+                for parent in new_parents {
+                    parents.insert(parent);
+                }
+            }
+
         for parent in parents.clone() {
             self.graph.insert((parent, search_target.clone()));
 
@@ -243,7 +251,14 @@ impl parser {
         #[cfg(test)]
             let children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
         #[cfg(not(test))]
-            let children :HashSet<String> = self.search_children(search_target.clone());
+            let mut children:HashSet<String> = HashSet::new();
+            for file in self.files_in_project.clone(){
+                let new_children = self.search_child_single_document(search_target.clone(), file.as_str());
+
+                for child in new_children {
+                    children.insert(child);
+                }
+            }
         for child in children.clone() {
             self.graph.insert((search_target.clone(), child));
         }
@@ -255,7 +270,7 @@ impl parser {
             let result = (parent == "parent1" || parent == "parent2") &&
             (child == "child1" || child == "child2") ;
         #[cfg(not(test))]
-            let result = self.search_children(parent.clone()).contains(child.as_str());
+            let result = self.search_child(parent.clone()).contains(child.as_str());
 
         if result {
             self.graph.insert((parent.clone(), child.clone()));
@@ -284,21 +299,6 @@ impl parser {
             CommandArg::Format(Format::Svg),
             CommandArg::Output(output_file.clone())
         ]).err());
-    }
-
-    fn search_parents(&mut self, function_name: String) -> HashSet<String> {
-        let mut result: HashSet<String> = HashSet::new();
-
-        for file in self.files_in_project.clone(){
-            let new_parents = self.search_parent_single_document(function_name.clone(), file.as_str());
-
-            for parent in new_parents {
-                result.insert(parent);
-            }
-        }
-
-
-        result
     }
 
     fn search_parent_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
@@ -332,21 +332,6 @@ impl parser {
         result
     }
 
-    fn search_children(&mut self, function_name: String) -> HashSet<String>{
-        let mut result: HashSet<String> = HashSet::new();
-
-        for file in self.files_in_project.clone(){
-            let new_children = self.search_child_single_document(function_name.clone(), file.as_str());
-
-            for child in new_children {
-                result.insert(child);
-            }
-        }
-
-
-        result
-    }
-
     fn search_child_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
         let mut result: HashSet<String> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
@@ -363,7 +348,7 @@ impl parser {
                         let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
                         let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(prep_call_hierarchy.unwrap().unwrap()[0].clone());
                         for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                            result.insert(outgoing_call.from.name.to_string());
+                            result.insert(outgoing_call.to.name.to_string());
                         }
                         break;
                     }

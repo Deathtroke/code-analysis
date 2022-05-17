@@ -23,12 +23,10 @@ fn main() {
     let opt = Opt::from_args();
 
     let project_path = "/Users/hannes.boerner/Downloads/criu-criu-dev/criu".to_string();
-    let input = r#"{@fanotify_resolve_remap}"#;
 
     let mut parser = parser::parser::new(project_path);
 
-    let functions = parser.parse(opt.query.as_str());
-    //println!("{:?}", functions);
+    parser.parse(opt.query.as_str());
 
     println!("{}", parser.graph_to_DOT());
     if opt.output != ""
