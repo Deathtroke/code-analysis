@@ -4,18 +4,37 @@ use lsp_types::notification::{DidOpenTextDocument, Initialized, Exit};
 use lsp_types::notification::Notification as LspNotification;
 use lsp_types::request::Request as LspRequest;
 
+use structopt;
+use structopt::StructOpt;
+
 mod parser;
 mod lang_server;
 
+#[derive(StructOpt, Debug)]
+#[structopt()]
+pub struct Opt {
+    #[structopt(short = "q", long = "query", default_value = r#"{@fanotify_resolve_remap}"#)]
+    query: String,
+    #[structopt(short = "o", long = "output-file", default_value = "")]
+    output: String,
+}
+
 fn main() {
-    let project_path = "/Users/hannes.boerner/Downloads/criu-criu-dev".to_string();
+    let opt = Opt::from_args();
+
+    let project_path = "/Users/hannes.boerner/Downloads/criu-criu-dev/criu".to_string();
     let input = r#"{@fanotify_resolve_remap}"#;
+
     let mut parser = parser::parser::new(project_path);
 
-    let functions = parser.parse(input);
-    println!("{:?}", functions);
+    let functions = parser.parse(opt.query.as_str());
+    //println!("{:?}", functions);
 
-    println!("{}", parser.graph_to_DOT())
+    println!("{}", parser.graph_to_DOT());
+    if opt.output != ""
+    {
+        parser.graph_to_file(opt.output);
+    }
 }
 
 

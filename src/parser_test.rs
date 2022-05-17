@@ -36,5 +36,5 @@ fn test_parser() {
         ("parent2".to_string(), "parent2".to_string())]);
     assert_eq!(parser.graph, graph_output);
     println!("{}", parser.graph_to_DOT());
-    parser.graph_to_file();
+    parser.graph_to_file("./graph.svg".to_string());
 }

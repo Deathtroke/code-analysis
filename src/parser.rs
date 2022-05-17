@@ -12,6 +12,8 @@ use graphviz_rust::attributes::packmode::graph;
 use super::*;
 use graphviz_rust::printer::PrinterContext;
 use graphviz_rust::cmd::{CommandArg, Format};
+use std::fs;
+
 use crate::lang_server::LanguageServer;
 
 #[derive(Parser)]
@@ -21,6 +23,7 @@ struct MyParser;
 pub struct parser {
     pub graph :HashSet<(String, String)>,
     lang_server : Box<dyn LanguageServer>,
+    files_in_project: Vec<String>,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
     //global_filter :HashSet<(String, String)>
 }
@@ -32,6 +35,24 @@ pub fn parse_grammar(input: &str) -> Pair<Rule> {
     pair
 }
 
+fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
+    let mut files :Vec<String> = Vec::new();
+    let paths = fs::read_dir(dir.clone()).unwrap();
+
+    for path in paths {
+        let path_str = path.as_ref().unwrap().path().to_str().unwrap().to_string();
+        if path.as_ref().unwrap().metadata().unwrap().is_dir() {
+            let mut subfolder = get_all_files_in_project(path_str, project_path.clone());
+            files.append(&mut subfolder);
+        } else {
+            if path_str.ends_with(".cpp") || path_str.ends_with(".c"){
+                files.push(path_str.replace(project_path.clone().as_str(),"."));
+            }
+        }
+    }
+    files
+}
+
 impl parser {
     pub fn new(project_path: String) -> parser {
         let mut p = parser{
@@ -41,7 +62,8 @@ impl parser {
                 .project(project_path.to_owned())
                 //.languages(language_list)
                 .launch()
-                .expect("Failed to spawn clangd")
+                .expect("Failed to spawn clangd"),
+            files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
             //global_vars:HashSet::new(),
             //global_filter:HashSet::new()
         };
@@ -255,19 +277,33 @@ impl parser {
 
     }
 
-    pub fn graph_to_file(&mut self) {
+    pub fn graph_to_file(&mut self, output_file: String) {
         let DOT_graph = self.graph_to_DOT();
         let g: Graph = parse(DOT_graph.as_str()).unwrap();
         println!("{:?}", exec(g, &mut PrinterContext::default(), vec![
             CommandArg::Format(Format::Svg),
-            CommandArg::Output("graph.svg".to_string())
+            CommandArg::Output(output_file.clone())
         ]).err());
     }
 
     fn search_parents(&mut self, function_name: String) -> HashSet<String> {
-        //println!("parent");
         let mut result: HashSet<String> = HashSet::new();
-        let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
+
+        for file in self.files_in_project.clone(){
+            let new_parents = self.search_parent_single_document(function_name.clone(), file.as_str());
+
+            for parent in new_parents {
+                result.insert(parent);
+            }
+        }
+
+
+        result
+    }
+
+    fn search_parent_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
+        let mut result: HashSet<String> = HashSet::new();
+        let document = self.lang_server.document_open(document_name).unwrap();
 
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
@@ -277,11 +313,9 @@ impl parser {
             },
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
-                    //println!("{:?}", symbol);
                     if symbol.name == function_name {
                         let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
                         let incoming_calls = self.lang_server.call_hierarchy_item_incoming(prep_call_hierarchy.unwrap().unwrap()[0].clone());
-                        //println!("{:?}", incoming_calls);
                         for incoming_call in incoming_calls.unwrap().unwrap() {
                             result.insert(incoming_call.from.name.to_string());
                         }
@@ -299,24 +333,37 @@ impl parser {
     }
 
     fn search_children(&mut self, function_name: String) -> HashSet<String>{
-        //println!("child");
         let mut result: HashSet<String> = HashSet::new();
-        let document = self.lang_server.document_open("/criu/fsnotify.c").unwrap();
+
+        for file in self.files_in_project.clone(){
+            let new_children = self.search_child_single_document(function_name.clone(), file.as_str());
+
+            for child in new_children {
+                result.insert(child);
+            }
+        }
+
+
+        result
+    }
+
+    fn search_child_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
+        let mut result: HashSet<String> = HashSet::new();
+        let document = self.lang_server.document_open(document_name).unwrap();
+
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
-        match doc_symbol.clone() {
+        match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
                 println!("unsupported symbols found");
             },
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
-                    //println!("{:?}", symbol);
                     if symbol.name == function_name {
                         let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
                         let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(prep_call_hierarchy.unwrap().unwrap()[0].clone());
-                        //println!("{:?}", outgoing_calls);
                         for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                            result.insert(outgoing_call.to.name.to_string());
+                            result.insert(outgoing_call.from.name.to_string());
                         }
                         break;
                     }
