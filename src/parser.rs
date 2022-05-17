@@ -229,7 +229,7 @@ impl parser {
 */
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
         #[cfg(test)]
-            let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
+            let mut parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
         #[cfg(not(test))]
             let mut parents:HashSet<String> = HashSet::new();
             for file in self.files_in_project.clone(){
@@ -249,7 +249,7 @@ impl parser {
 
     fn search_child(&mut self, search_target: String)  -> HashSet<String>{
         #[cfg(test)]
-            let children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
+            let mut children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
         #[cfg(not(test))]
             let mut children:HashSet<String> = HashSet::new();
             for file in self.files_in_project.clone(){
