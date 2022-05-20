@@ -119,8 +119,9 @@ impl ClangdLanguageServer {
     fn compose_args(project_path: String) -> Vec<String> {
         vec![
             "--background-index".to_owned(),
-            "--compile-commands-dir".to_owned(),
-            project_path,
+            //"--cross-file-rename".to_owned(),
+            format!("--compile-commands-dir=\"{}\"",project_path).to_owned(),
+            //project_path,
         ]
     }
 
