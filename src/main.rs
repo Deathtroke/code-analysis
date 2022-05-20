@@ -10,6 +10,8 @@ use structopt::StructOpt;
 mod parser;
 mod lang_server;
 
+use regex::Regex;
+
 #[derive(StructOpt, Debug)]
 #[structopt()]
 pub struct Opt {
@@ -17,7 +19,7 @@ pub struct Opt {
     query: String,
     #[structopt(short = "o", long = "output-file")]
     output: Option<String>,
-    #[structopt(short = "p", long = "project-path", default_value = "/Users/hannes.boerner/Downloads/criu-criu-dev")]
+    #[structopt(short = "p", long = "project-path", default_value = "/Users/hannes.boerner/Documents/criu/criu")]
     project_path: String,
 }
 
@@ -25,6 +27,10 @@ fn main() {
     let opt = Opt::from_args();
 
     let mut parser = parser::parser::new(opt.project_path);
+
+
+    let re = Regex::new(r".").unwrap();
+    println!("regex test: {}", re.is_match("abcabc"));
 
     parser.parse(opt.query.as_str());
 
