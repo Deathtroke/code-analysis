@@ -30,7 +30,7 @@ impl fmt::Display for LspError {
 
 impl std::error::Error for LspError {}
 
-type Error = Box<dyn std::error::Error>;
+pub(crate) type Error = Box<dyn std::error::Error>;
 
 pub trait LanguageServer : Send {
     fn initialize(&mut self) -> Result<InitializeResult, Error>;

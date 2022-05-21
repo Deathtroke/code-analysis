@@ -1,6 +1,6 @@
 COMMENT = _{ "NB." ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{((" ")  | "\t")+}
-ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | " " | "_")*}
+ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*}
 verb = @{ "@" ~ident}
 scope = { "{" ~ statements ~ "}" }
 statement = {verb* ~ scope?}
