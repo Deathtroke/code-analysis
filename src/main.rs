@@ -37,7 +37,5 @@ fn main() {
     println!("{:?}", serde_json::to_string(&parser.graph));
 }
 
-
 #[cfg(test)]
 mod grammar_test;
-mod parser_test;
