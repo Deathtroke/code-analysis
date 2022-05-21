@@ -5,17 +5,13 @@ use pest::iterators::{Pair, Pairs};
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::string::String;
-use graphviz_rust::{exec, parse, print};
-use dot_structures::*;
-use dot_generator::*;
-use graphviz_rust::attributes::packmode::graph;
 use super::*;
-use graphviz_rust::printer::PrinterContext;
-use graphviz_rust::cmd::{CommandArg, Format};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use anyhow;
+use tabbycat;
 
 use std::{thread, time};
 use json::Error;
@@ -461,28 +457,6 @@ impl LSPInterface for parser {
 }
 
 impl Graph {
-    pub fn graph_to_DOT(&mut  self) -> String {
-        let mut g = "digraph G { \n".to_string();
-        for edge in &self.edges {
-            g.push_str(edge.node_from.as_str());
-            g.push_str(" -> ");
-            g.push_str(edge.node_to.as_str());
-            g.push_str(";\n");
-        }
-        g.push_str("}");
-        g
-
-    }
-
-    pub fn graph_to_file(&mut self, output_file: String) {
-        let DOT_graph = self.graph_to_DOT();
-        let g: dot_structures::Graph = parse(DOT_graph.as_str()).unwrap();
-        println!("{:?}", exec(g, &mut PrinterContext::default(), vec![
-            CommandArg::Format(Format::Svg),
-            CommandArg::Output(output_file.clone())
-        ]).err());
-    }
-
     pub fn graph_to_tuple(&mut self) -> HashSet<(String,String)>{
         let mut tuples: HashSet<(String,String)> = HashSet::new();
         for edge in &self.edges{
@@ -498,6 +472,28 @@ impl Graph {
             node_to: to
         };
         self.edges.insert(edge);
+    }
+}
+
+impl TryFrom<Graph> for tabbycat::Graph {
+    type Error = anyhow::Error;
+
+    fn try_from(g: Graph) -> Result<Self, Self::Error> {
+        let mut stmts = tabbycat::StmtList::new();
+
+        for edge in &g.edges {
+            stmts = stmts.add_edge(
+                tabbycat::Edge::head_node(tabbycat::Identity::id(edge.node_from.as_str())?, None)
+                .arrow_to_node(tabbycat::Identity::id(edge.node_to.as_str())?, None));
+        }
+
+        tabbycat::GraphBuilder::default()
+            .graph_type(tabbycat::GraphType::DiGraph)
+        .strict(false)
+        .id(tabbycat::Identity::id("G").unwrap())
+        .stmts(stmts)
+        .build()
+        .map_err(anyhow::Error::msg)
     }
 }
 

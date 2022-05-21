@@ -4,6 +4,7 @@ use lsp_types::notification::{DidOpenTextDocument, Initialized, Exit};
 use lsp_types::notification::Notification as LspNotification;
 use lsp_types::request::Request as LspRequest;
 use serde::Serialize;
+use tabbycat;
 
 use structopt;
 use structopt::StructOpt;
@@ -23,18 +24,30 @@ pub struct Opt {
 }
 
 fn main() {
+    if let Err(err) = try_main() {
+        eprintln!("ERROR: {}", err);
+        err.chain().skip(1).for_each(|cause| eprintln!("because: {}", cause));
+        std::process::exit(1);
+    }
+}
+
+fn try_main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
     let mut parser = parser::parser::new(opt.project_path);
 
     parser.parse(opt.query.as_str());
 
-    if opt.output.is_some() {
-        parser.graph.graph_to_file(opt.output.unwrap());
+    let mut out : Box<dyn std::io::Write> = if let Some(filename) = opt.output {
+        Box::new(std::fs::File::create(filename)?)
     } else {
-        println!("{}", parser.graph.graph_to_DOT());
-    }
-    println!("{:?}", serde_json::to_string(&parser.graph));
+        Box::new(std::io::stdout())
+    };
+
+    let g : tabbycat::Graph = parser.graph.try_into()?;
+    out.write(g.to_string().as_bytes())?;
+
+    Ok(())
 }
 
 #[cfg(test)]

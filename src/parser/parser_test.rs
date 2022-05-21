@@ -68,6 +68,6 @@ fn test_parser() {
         ("parent2".to_string(), "parent1".to_string()),
         ("parent2".to_string(), "parent2".to_string())]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
-    println!("{}", parser.graph.graph_to_DOT());
-    parser.graph.graph_to_file("./graph.svg".to_string());
+    let g : tabbycat::Graph = parser.graph.try_into().unwrap();
+    assert_eq!(g.to_string(), "This test is unusable")
 }
