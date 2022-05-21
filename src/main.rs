@@ -3,6 +3,7 @@ use lsp_types::*;
 use lsp_types::notification::{DidOpenTextDocument, Initialized, Exit};
 use lsp_types::notification::Notification as LspNotification;
 use lsp_types::request::Request as LspRequest;
+use serde::Serialize;
 
 use structopt;
 use structopt::StructOpt;
@@ -35,10 +36,11 @@ fn main() {
     parser.parse(opt.query.as_str());
 
     if opt.output.is_some() {
-        parser.graph_to_file(opt.output.unwrap());
+        parser.graph.graph_to_file(opt.output.unwrap());
     } else {
-        println!("{}", parser.graph_to_DOT());
+        println!("{}", parser.graph.graph_to_DOT());
     }
+    println!("{:?}", serde_json::to_string(&parser.graph));
 }
 
 

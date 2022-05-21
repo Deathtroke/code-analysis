@@ -1,7 +1,7 @@
 use std::any::Any;
 use pest::Parser;
 use pest_derive::Parser;
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::string::String;
@@ -18,10 +18,13 @@ use std::io::prelude::*;
 use std::path::Path;
 
 use std::{thread, time};
+use json::Error;
 use json::JsonValue::String as OtherString;
 use juniper::GraphQLType;
 use regex::Regex;
 use stderrlog::new;
+
+use serde::ser::{Serialize, Serializer, SerializeStruct, SerializeSeq};
 
 use crate::lang_server::LanguageServer;
 
@@ -30,7 +33,7 @@ use crate::lang_server::LanguageServer;
 struct MyParser;
 
 pub struct parser {
-    pub graph :HashSet<(String, String)>,
+    pub graph :Graph,
     lang_server : Box<dyn LanguageServer>,
     files_in_project: Vec<String>,
     project_path: String,
@@ -38,10 +41,42 @@ pub struct parser {
     //global_filter :HashSet<(String, String)>
 }
 
-pub fn parse_grammar(input: &str) -> Pair<Rule> {
-    let pair = MyParser::parse(Rule::query, input)
-        .expect("unsuccessful parse")
-        .next().unwrap();
+#[derive(Eq, Hash, PartialEq)]
+pub struct Edge {
+    edge_properties: Option<String>,
+    node_from: String,
+    node_to: String,
+}
+
+pub struct Graph {
+    edges: HashSet<Edge>,
+}
+
+impl Serialize for Edge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        let mut s = serializer.serialize_struct("Edge", 3)?;
+        s.serialize_field("edge_properties", &self.edge_properties)?;
+        s.serialize_field("from_node", &self.node_from)?;
+        s.serialize_field("to_node", &self.node_to)?;
+        s.end()
+    }
+}
+
+impl Serialize for Graph {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        let mut s = serializer.serialize_seq( Some(self.edges.len()))?;
+        for edge in &self.edges {
+            s.serialize_element(&edge);
+        }
+        s.end()
+    }
+}
+
+
+pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
+    let pair = MyParser::parse(Rule::query, input);
+        //.expect("unsuccessful parse")
+        //.next();
     pair
 }
 
@@ -66,10 +101,11 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
 impl parser {
     pub fn new(project_path: String) -> parser {
         let mut p = parser{
-            graph:HashSet::new(),
+            graph: Graph {
+                edges: HashSet::new(),
+            },
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server("/usr/bin/clangd".to_owned())
-                //.server("/Users/hannes.boerner/Documents/clangd_14.0.3/bin/clangd-indexer".to_owned())
                 .project(project_path.to_owned())
                 //.languages(language_list)
                 .launch()
@@ -79,14 +115,18 @@ impl parser {
             //global_vars:HashSet::new(),
             //global_filter:HashSet::new()
         };
-        //println!("init {:?}", p.lang_server.initialize());
         p.lang_server.initialize();
         p
     }
 
     pub fn parse(&mut self, input: &str) -> HashSet<String>{
         let pair = parse_grammar(input);
-        self.parse_statements(pair)
+        if pair.is_ok() {
+            self.parse_statements(pair.unwrap().next().unwrap())
+        } else {
+            println!("unable to parse input: {:?}", pair.err());
+            HashSet::new()
+        }
     }
 
     fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<String> {
@@ -150,14 +190,11 @@ impl parser {
                 Rule::verb => {
                     let mut name = inner_pair.as_str();
                     name = name.strip_prefix("@").unwrap();
-                    while name.chars().last().unwrap() == ' '{
-                        name = name.strip_suffix(" ").unwrap();
-                    }
                     parent_names.insert(name.to_string());
                 }
                 Rule::scope => {
                     do_search = true;
-                    let scope = inner_pair.into_inner().nth(0).unwrap();
+                    let scope = inner_pair.into_inner().nth(0).unwrap(); //there is always a nth(0) -> the found scope pair
                     match scope.as_rule() {
                         Rule::statements => {
                             child_names = self.parse_statements(scope);
@@ -272,7 +309,8 @@ impl parser {
         }
 
         for parent in parents.clone() {
-            self.graph.insert((parent, search_target.clone()));
+            let edge: Edge = Edge{ edge_properties: None, node_from: parent, node_to: search_target.clone()};
+            self.graph.edges.insert(edge);
 
         }
         parents
@@ -299,14 +337,13 @@ impl parser {
             if need_lsp
             {
                 println!("{}, {}", file_path, search_target.clone());
-                new_parents = self.search_parent_single_document(search_target.clone(), file_path.as_str());
+                new_parents = self.search_parent_single_document(search_target.clone(), file_path.as_str()).unwrap();
                 println!("{:?}", new_parents);
             }
             for parent in new_parents {
                 parents.insert(parent);
             }
             //thread::sleep(time::Duration::from_secs(1));
-            //self.lang_server.
         }
         parents
     }
@@ -318,7 +355,8 @@ impl parser {
             let mut children:HashSet<String> = self.search_all_children(search_target.clone());
 
         for child in children.clone() {
-            self.graph.insert((search_target.clone(), child));
+            let edge: Edge = Edge{ edge_properties: None, node_from: search_target.clone(), node_to: child};
+            self.graph.edges.insert(edge);
         }
         children
     }
@@ -363,7 +401,8 @@ impl parser {
             let result = self.search_child(parent.clone()).contains(child.as_str());
 
         if result {
-            self.graph.insert((parent.clone(), child.clone()));
+            let edge: Edge = Edge{ edge_properties: None, node_from: parent, node_to: child};
+            self.graph.edges.insert(edge);
         }
 
         result
@@ -495,34 +534,48 @@ impl parser {
         ]).err());
     }
 
-
-
     fn search_parent_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
         let mut result: HashSet<String> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
 
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
-            },
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.name == function_name {
-                        let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                        let incoming_calls = self.lang_server.call_hierarchy_item_incoming(prep_call_hierarchy.unwrap().unwrap()[0].clone());
-                        for incoming_call in incoming_calls.unwrap().unwrap() {
-                            result.insert(incoming_call.from.name.to_string());
-                        }
-                        break;
-                    }
+                match doc_symbol {
+                    Some(DocumentSymbolResponse::Flat(_)) => {
+                        println!("unsupported symbols found");
+                    },
+                    Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                        let mut children = HashSet::new();
+                        for symbol in doc_symbols {
+                            if symbol.name == function_name {
+                                let prep_call_hierarchy_res = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                                if prep_call_hierarchy_res.is_ok(){
+                                    let call_hierarchy_item = prep_call_hierarchy_res.unwrap().unwrap()[0].clone();
 
+                                    let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_item);
+                                    for incoming_call in incoming_calls.unwrap().unwrap() {
+                                        children.insert(incoming_call.from.name.to_string());
+                                    }
+                                    break;
+                                } else {
+                                    result = Err(prep_call_hierarchy_res.err().unwrap());
+                                    return result;
+                                }
+                            }
+                        }
+                        result = Ok(children);
+                    },
+                    None => {
+                        println!("no symbols found");
+                    }
                 }
-            },
-            None => {
-                println!("no symbols found");
+            } else {
+                result = Err(doc_symbol_res.err().unwrap());
+                return result;
             }
+        } else {
+            result = Err(document_res.err().unwrap());
+            return result;
         }
 
         result
@@ -655,5 +708,29 @@ impl parser {
         }
 
         result
+    }
+}
+
+impl Graph {
+    pub fn graph_to_DOT(&mut  self) -> String {
+        let mut g = "digraph G { \n".to_string();
+        for edge in &self.edges {
+            g.push_str(edge.node_from.as_str());
+            g.push_str(" -> ");
+            g.push_str(edge.node_to.as_str());
+            g.push_str(";\n");
+        }
+        g.push_str("}");
+        g
+
+    }
+
+    pub fn graph_to_file(&mut self, output_file: String) {
+        let DOT_graph = self.graph_to_DOT();
+        let g: dot_structures::Graph = parse(DOT_graph.as_str()).unwrap();
+        println!("{:?}", exec(g, &mut PrinterContext::default(), vec![
+            CommandArg::Format(Format::Svg),
+            CommandArg::Output(output_file.clone())
+        ]).err());
     }
 }
