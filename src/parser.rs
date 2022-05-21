@@ -32,6 +32,13 @@ use crate::lang_server::LanguageServer;
 #[grammar = "grammar.pest"]
 struct MyParser;
 
+pub trait LSPInterface {
+    fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
+    fn search_child(&mut self, search_target: String)  -> HashSet<String>;
+    fn paren_child_exists(&mut self, parent: String, child: String) -> bool;
+
+}
+
 pub struct parser {
     pub graph :Graph,
     lang_server : Box<dyn LanguageServer>,
@@ -348,19 +355,6 @@ impl parser {
         parents
     }
 
-    fn search_child(&mut self, search_target: String)  -> HashSet<String>{
-        #[cfg(test)]
-            let mut children :HashSet<String> = HashSet::from(["child1".to_string(), "child2".to_string()]);
-        #[cfg(not(test))]
-            let mut children:HashSet<String> = self.search_all_children(search_target.clone());
-
-        for child in children.clone() {
-            let edge: Edge = Edge{ edge_properties: None, node_from: search_target.clone(), node_to: child};
-            self.graph.edges.insert(edge);
-        }
-        children
-    }
-
     fn search_all_children(&mut self, search_target: String) -> HashSet<String> {
         let mut children:HashSet<String> = HashSet::new();
         //println!("child {}",self.files_in_project.clone().len());
@@ -391,21 +385,6 @@ impl parser {
             //thread::sleep(time::Duration::from_secs(1));
         }
         children
-    }
-
-    fn paren_child_exists(&mut self, parent: String, child: String) -> bool{
-        #[cfg(test)]
-            let result = (parent == "parent1" || parent == "parent2") &&
-            (child == "child1" || child == "child2") ;
-        #[cfg(not(test))]
-            let result = self.search_child(parent.clone()).contains(child.as_str());
-
-        if result {
-            let edge: Edge = Edge{ edge_properties: None, node_from: parent, node_to: child};
-            self.graph.edges.insert(edge);
-        }
-
-        result
     }
 
     fn search_connection_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
@@ -711,6 +690,37 @@ impl parser {
     }
 }
 
+#[cfg(not(test))]
+impl LSPInterface for parser {
+    fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
+        let parents:HashSet<String> = self.search_all_parents(search_target.clone());
+
+        for parent in parents.clone() {
+            self.graph.insert_edge(None, parent, search_target.to_string());
+        }
+        parents
+    }
+
+    fn search_child(&mut self, search_target: String)  -> HashSet<String>{
+        let mut children:HashSet<String> = self.search_all_children(search_target.clone());
+
+        for child in children.clone() {
+            self.graph.insert_edge(None, search_target.to_string(), child);
+        }
+        children
+    }
+
+    fn paren_child_exists(&mut self, parent: String, child: String) -> bool{
+        let result = self.search_child(parent.clone()).contains(child.as_str());
+
+        if result {
+            self.graph.insert_edge(None, parent, child);
+        }
+
+        result
+    }
+}
+
 impl Graph {
     pub fn graph_to_DOT(&mut  self) -> String {
         let mut g = "digraph G { \n".to_string();
@@ -733,4 +743,24 @@ impl Graph {
             CommandArg::Output(output_file.clone())
         ]).err());
     }
+
+    pub fn graph_to_tuple(&mut self) -> HashSet<(String,String)>{
+        let mut tuples: HashSet<(String,String)> = HashSet::new();
+        for edge in &self.edges{
+            tuples.insert((edge.node_from.clone(), edge.node_to.clone()));
+        }
+        tuples
+    }
+
+    pub fn insert_edge(&mut self, option: Option<String>, from: String, to: String){
+        let edge = Edge{
+            edge_properties: option,
+            node_from: from,
+            node_to: to
+        };
+        self.edges.insert(edge);
+    }
 }
+
+#[cfg(test)]
+mod parser_test;
