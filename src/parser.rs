@@ -18,204 +18,19 @@ use json::Error;
 use json::JsonValue::String as OtherString;
 use juniper::GraphQLType;
 
-use serde::ser::{Serialize, Serializer, SerializeStruct, SerializeSeq};
-
-use crate::lang_server::LanguageServer;
+use crate::searcher::LSPInterface;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct MyParser;
 
-pub trait LSPInterface {
-    fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
-    fn search_child(&mut self, search_target: String)  -> HashSet<String>;
-    fn paren_child_exists(&mut self, parent: String, child: String) -> bool;
-
-}
-
 pub struct parser {
-    pub graph :Graph,
-    lang_server : LSPServer,
+    pub graph : graph::Graph,
+    lang_server : searcher::LSPServer,
     files_in_project: Vec<String>,
     project_path: String,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
     //global_filter :HashSet<(String, String)>
-}
-
-struct LSPServer {
-    lang_server : Box<dyn LanguageServer>,
-}
-
-#[derive(Eq, Hash, PartialEq)]
-pub struct Edge {
-    edge_properties: Option<String>,
-    node_from: String,
-    node_to: String,
-}
-
-pub struct Graph {
-    edges: HashSet<Edge>,
-}
-
-
-
-pub struct FunctionEdge {
-    function_name: String,
-}
-
-pub trait MatchFunctionEdge {
-    fn get_func_name(&mut self) -> String;
-}
-
-pub trait ForcedEdge : MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
-}
-
-pub trait DefaultEdge: MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
-}
-
-impl MatchFunctionEdge for FunctionEdge {
-    fn get_func_name(&mut self) -> String {
-        self.function_name.clone()
-    }
-}
-
-impl ForcedEdge for FunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool {
-        true
-    }
-}
-
-impl DefaultEdge for FunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool {
-        todo!()
-    }
-
-
-}
-
-impl LSPServer {
-    pub fn new(project_path: String) -> LSPServer {
-        let mut lsp_server = LSPServer{
-            lang_server: lang_server::LanguageServerLauncher::new()
-                .server("/usr/bin/clangd".to_owned())
-                .project(project_path.to_owned())
-                //.languages(language_list)
-                .launch()
-                .expect("Failed to spawn clangd"),
-        };
-        lsp_server.lang_server.initialize();
-        lsp_server
-    }
-
-    pub fn search_parent_single_document(&mut self, function_name: String, document_name: &str) -> Result<HashSet<String>,  lang_server::Error> {
-        let mut result: Result<HashSet<String>, lang_server::Error> = Ok(HashSet::new());
-        let document_res = self.lang_server.document_open(document_name);
-        if document_res.is_ok(){
-            let document = document_res.unwrap();
-
-            let doc_symbol_res = self.lang_server.document_symbol(&document);
-            println!("sym {:?}", doc_symbol_res);
-            if doc_symbol_res.is_ok(){
-                let doc_symbol = doc_symbol_res.unwrap();
-
-                match doc_symbol {
-                    Some(DocumentSymbolResponse::Flat(_)) => {
-                        println!("unsupported symbols found");
-                    },
-                    Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                        let mut children = HashSet::new();
-                        for symbol in doc_symbols {
-                            if symbol.name == function_name {
-                                let prep_call_hierarchy_res = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                                if prep_call_hierarchy_res.is_ok(){
-                                    println!("x {:?}", prep_call_hierarchy_res);
-                                    let call_hierarchy_items = prep_call_hierarchy_res.unwrap().unwrap();
-                                    if call_hierarchy_items.len() > 0 {
-                                        let call_hierarchy_item = call_hierarchy_items[0].clone();
-
-                                        let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_item);
-                                        for incoming_call in incoming_calls.unwrap().unwrap() {
-                                            children.insert(incoming_call.from.name.to_string());
-                                        }
-                                    }
-                                    break;
-                                } else {
-                                    result = Err(prep_call_hierarchy_res.err().unwrap());
-                                    return result;
-                                }
-                            }
-                        }
-                        result = Ok(children);
-                    },
-                    None => {
-                        println!("no symbols found");
-                    }
-                }
-            } else {
-                result = Err(doc_symbol_res.err().unwrap());
-                return result;
-            }
-        } else {
-            result = Err(document_res.err().unwrap());
-            return result;
-        }
-
-        result
-    }
-
-    fn search_child_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
-        let mut result: HashSet<String> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
-            },
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.name == function_name {
-                        let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                        let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(prep_call_hierarchy.unwrap().unwrap()[0].clone());
-                        for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                            result.insert(outgoing_call.to.name.to_string());
-                        }
-                        break;
-                    }
-
-                }
-            },
-            None => {
-                println!("no symbols found");
-            }
-        }
-
-        result
-    }
-
-}
-
-impl Serialize for Edge {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
-        let mut s = serializer.serialize_struct("Edge", 3)?;
-        s.serialize_field("edge_properties", &self.edge_properties)?;
-        s.serialize_field("from_node", &self.node_from)?;
-        s.serialize_field("to_node", &self.node_to)?;
-        s.end()
-    }
-}
-
-impl Serialize for Graph {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
-        let mut s = serializer.serialize_seq( Some(self.edges.len()))?;
-        for edge in &self.edges {
-            s.serialize_element(&edge);
-        }
-        s.end()
-    }
 }
 
 
@@ -247,10 +62,10 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
 impl parser {
     pub fn new(project_path: String) -> parser {
         let mut p = parser{
-            graph: Graph {
+            graph: graph::Graph {
                 edges: HashSet::new(),
             },
-            lang_server: LSPServer::new(project_path.clone()),
+            lang_server: searcher::LSPServer::new(project_path.clone()),
             files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
             project_path,
             //global_vars:HashSet::new(),
@@ -483,7 +298,7 @@ impl parser {
 }
 
 #[cfg(not(test))]
-impl LSPInterface for parser {
+impl searcher::LSPInterface for parser {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
         let parents:HashSet<String> = self.search_all_parents(search_target.clone());
 
@@ -510,47 +325,6 @@ impl LSPInterface for parser {
         }
 
         result
-    }
-}
-
-impl Graph {
-    pub fn graph_to_tuple(&mut self) -> HashSet<(String,String)>{
-        let mut tuples: HashSet<(String,String)> = HashSet::new();
-        for edge in &self.edges{
-            tuples.insert((edge.node_from.clone(), edge.node_to.clone()));
-        }
-        tuples
-    }
-
-    pub fn insert_edge(&mut self, option: Option<String>, from: String, to: String){
-        let edge = Edge{
-            edge_properties: option,
-            node_from: from,
-            node_to: to
-        };
-        self.edges.insert(edge);
-    }
-}
-
-impl TryFrom<Graph> for tabbycat::Graph {
-    type Error = anyhow::Error;
-
-    fn try_from(g: Graph) -> Result<Self, Self::Error> {
-        let mut stmts = tabbycat::StmtList::new();
-
-        for edge in &g.edges {
-            stmts = stmts.add_edge(
-                tabbycat::Edge::head_node(tabbycat::Identity::id(edge.node_from.as_str())?, None)
-                .arrow_to_node(tabbycat::Identity::id(edge.node_to.as_str())?, None));
-        }
-
-        tabbycat::GraphBuilder::default()
-            .graph_type(tabbycat::GraphType::DiGraph)
-        .strict(false)
-        .id(tabbycat::Identity::id("G").unwrap())
-        .stmts(stmts)
-        .build()
-        .map_err(anyhow::Error::msg)
     }
 }
 
