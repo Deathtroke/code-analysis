@@ -246,110 +246,6 @@ impl parser {
         (attribute, value)
     }
 
-
-
-    fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
-        let mut parent_filter:HashMap <String, String> = HashMap::new();
-        parent_filter.insert("function".to_string(), ".".to_string());
-        let mut child_filter:HashMap <String, String> = HashMap::new();
-        child_filter.insert("function".to_string(),search_target.clone());
-        #[cfg(test)]
-            let connection :HashSet<(String, String)> = HashSet::from([("parent1".to_string(), "".to_string()), ("parent2".to_string(), "".to_string())]);
-        #[cfg(not(test))]
-            let connection :HashSet<(String, String)> = self.search_all_connections_filter(parent_filter, child_filter);
-
-        println!("{:?}", connection);
-
-        let mut parents: HashSet<String> = HashSet::new();
-        for parent in connection{
-            parents.insert(parent.0);
-        }
-
-        for parent in parents.clone() {
-            let edge: Edge = Edge{ edge_properties: None, node_from: parent, node_to: search_target.clone()};
-            self.graph.edges.insert(edge);
-
-        }
-        parents
-    }
-
-    fn search_all_parents(&mut self, search_target: String) -> HashSet<String> {
-        let mut parents:HashSet<String> = HashSet::new();
-        //println!("parent {}",self.files_in_project.clone().len());
-        for file_path in self.files_in_project.clone(){
-            let path = self.project_path.clone() + "/" + file_path.as_str();
-            let mut file = match File::open(&path){
-                Err(why) => panic!("could not open: {}", why),
-                Ok(file) => file
-            };
-            let mut s = String::new();
-            match file.read_to_string(&mut s){
-                Err(why) => panic!("could not read: {}", why),
-                Ok(_) => { }
-            }
-
-            let mut new_parents = HashSet::new();
-            let need_lsp = s.contains(&search_target.clone());
-            //println!("{}", need_lsp);
-            if need_lsp
-            {
-                println!("search in {}, function {}", file_path, search_target.clone());
-                new_parents = self.lang_server.search_parent_single_document(search_target.clone(), file_path.as_str()).unwrap();
-                println!("{:?}", new_parents);
-            }
-            for parent in new_parents {
-                parents.insert(parent);
-            }
-            //thread::sleep(time::Duration::from_secs(1));
-        }
-        parents
-    }
-
-    fn search_all_children(&mut self, search_target: String) -> HashSet<String> {
-        let mut children:HashSet<String> = HashSet::new();
-        //println!("child {}",self.files_in_project.clone().len());
-        for file_path in self.files_in_project.clone(){
-            let path = self.project_path.clone() + "/" + file_path.as_str();
-            let mut file = match File::open(&path){
-                Err(why) => panic!("could not open: {}", why),
-                Ok(file) => file
-            };
-            let mut s = String::new();
-            match file.read_to_string(&mut s){
-                Err(why) => panic!("could not read: {}", why),
-                Ok(_) => { }
-            }
-
-            let mut new_children = HashSet::new();
-            let need_lsp = s.contains(&search_target.clone());
-            //println!("{}", need_lsp);
-            if need_lsp
-            {
-                //println!("{}, {}", file_path, search_target.clone());
-                new_children = self.lang_server.search_child_single_document(search_target.clone(), file_path.as_str());
-                //println!("{:?}", new_children);
-            }
-            for child in new_children {
-                children.insert(child);
-            }
-            //thread::sleep(time::Duration::from_secs(1));
-        }
-        children
-    }
-
-    fn search_connection_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
-        #[cfg(test)]
-            let parents :HashSet<(String, String)> = HashSet::from([("parent1".to_string(), "parent2".to_string()), ("parent2".to_string(), "parent1".to_string())]);
-        #[cfg(not(test))]
-            let parents:HashSet<(String, String)> = self.search_all_connections_filter(parent_filter.clone(), child_filter.clone());
-
-        for parent in parents.clone() {
-            //self.graph.insert((parent, search_target.clone()));
-
-        }
-        parents
-    }
-
     fn search_all_connections_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
         let mut connections:HashSet<(String, String)> = HashSet::new();
 
@@ -393,7 +289,7 @@ impl parser {
                     if need_lsp
                     {
                         //println!("{}, {}", file_path, search_target.clone());
-                        new_children = self.search_parent_single_document_filter(func_filter_c.clone(), parent_filter.clone(), file_path.as_str());
+                        new_children = self.lang_server.search_parent_single_document_filter(func_filter_c.clone(), parent_filter.clone(), file_path.as_str());
                         //println!("{:?}", new_children);
                     }
                     for child in new_children {
@@ -424,7 +320,7 @@ impl parser {
                     if need_lsp
                     {
                         //println!("{}, {}", file_path, search_target.clone());
-                        new_children = self.search_child_single_document_filter(func_filter_p.clone(), child_filter.clone(), file_path.as_str());
+                        new_children = self.lang_server.search_child_single_document_filter(func_filter_p.clone(), child_filter.clone(), file_path.as_str());
                         //println!("{:?}", new_children);
                     }
                     for child in new_children {
@@ -436,226 +332,39 @@ impl parser {
         }
         connections
     }
-
-
-
-
-
-    pub fn graph_to_DOT(&mut  self) -> String {
-        let mut g = "digraph G { \n".to_string();
-        for edge in &self.graph {
-            g.push_str(edge.0.as_str());
-            g.push_str(" -> ");
-            g.push_str(edge.1.as_str());
-            g.push_str(";\n");
-        }
-        g.push_str("}");
-        g
-
-    }
-
-    pub fn graph_to_file(&mut self, output_file: String) {
-        let DOT_graph = self.graph_to_DOT();
-        let g: Graph = parse(DOT_graph.as_str()).unwrap();
-        println!("{:?}", exec(g, &mut PrinterContext::default(), vec![
-            CommandArg::Format(Format::Svg),
-            CommandArg::Output(output_file.clone())
-        ]).err());
-    }
-
-    fn search_parent_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
-        let mut result: HashSet<String> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-                match doc_symbol {
-                    Some(DocumentSymbolResponse::Flat(_)) => {
-                        println!("unsupported symbols found");
-                    },
-                    Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                        let mut children = HashSet::new();
-                        for symbol in doc_symbols {
-                            if symbol.name == function_name {
-                                let prep_call_hierarchy_res = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                                if prep_call_hierarchy_res.is_ok(){
-                                    let call_hierarchy_item = prep_call_hierarchy_res.unwrap().unwrap()[0].clone();
-
-                                    let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_item);
-                                    for incoming_call in incoming_calls.unwrap().unwrap() {
-                                        children.insert(incoming_call.from.name.to_string());
-                                    }
-                                    break;
-                                } else {
-                                    result = Err(prep_call_hierarchy_res.err().unwrap());
-                                    return result;
-                                }
-                            }
-                        }
-                        result = Ok(children);
-                    },
-                    None => {
-                        println!("no symbols found");
-                    }
-                }
-            } else {
-                result = Err(doc_symbol_res.err().unwrap());
-                return result;
-            }
-        } else {
-            result = Err(document_res.err().unwrap());
-            return result;
-        }
-
-        result
-    }
-
-    fn search_child_single_document(&mut self, function_name: String, document_name: &str) -> HashSet<String> {
-        let mut result: HashSet<String> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
-            },
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.name == function_name {
-                        let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                        let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(prep_call_hierarchy.unwrap().unwrap()[0].clone());
-                        for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                            result.insert(outgoing_call.to.name.to_string());
-                        }
-                        break;
-                    }
-
-                }
-            },
-            None => {
-                println!("no symbols found");
-            }
-        }
-
-        result
-    }
-
-    fn search_child_single_document_filter(&mut self, func_filter: Regex, mut child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
-        let mut result: HashSet<(String, String)> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let mut file_filter_c= Regex::new(".").unwrap(); //any
-        if child_filter.contains_key("file") {
-            file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
-        }
-        let mut func_filter_c= Regex::new(".").unwrap(); //any
-        if child_filter.contains_key("function") {
-            func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
-        }
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
-            },
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.kind == SymbolKind::FUNCTION {
-                        let func_name = symbol.name;
-                        //println!("func {}", func_name);
-                        if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            if call_hierarchy_array.len() > 0 {
-                                let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
-                                for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(outgoing_call.to.name.as_str()) &&
-                                        file_filter_c.is_match(outgoing_call.to.uri.as_str()) {
-                                        result.insert((func_name.clone(), outgoing_call.to.name.to_string()));
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            },
-            None => {
-                println!("no symbols found");
-            }
-        }
-
-        result
-    }
-
-    fn search_parent_single_document_filter(&mut self, func_filter: Regex, mut parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
-        let mut result: HashSet<(String, String)> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let mut file_filter_c= Regex::new(".").unwrap(); //any
-        if parent_filter.contains_key("file") {
-            file_filter_c = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
-        }
-        let mut func_filter_c= Regex::new(".").unwrap(); //any
-        if parent_filter.contains_key("function") {
-            func_filter_c = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
-        }
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
-            },
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.kind == SymbolKind::FUNCTION {
-                        let func_name = symbol.name;
-                        //println!("{}", func_name);
-                        if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
-                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            if call_hierarchy_array.len() > 0 {
-                                let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
-                                for incoming_call in incoming_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(incoming_call.from.name.as_str()) &&
-                                        file_filter_c.is_match(incoming_call.from.uri.as_str()) {
-                                        result.insert((incoming_call.from.name.to_string(), func_name.clone()));
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            },
-            None => {
-                println!("no symbols found");
-            }
-        }
-
-        result
-    }
 }
 
 #[cfg(not(test))]
 impl searcher::LSPInterface for parser {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
-        let parents:HashSet<String> = self.search_all_parents(search_target.clone());
+        let mut parent_filter:HashMap <String, String> = HashMap::new();
+        parent_filter.insert("function".to_string(), ".".to_string());
+        let mut child_filter:HashMap <String, String> = HashMap::new();
+        child_filter.insert("function".to_string(),search_target.clone());
 
-        for parent in parents.clone() {
-            self.graph.insert_edge(None, parent, search_target.to_string());
+        //let parents:HashSet<String> = self.search_all_parents(search_target.clone());
+        let connection :HashSet<(String, String)> = self.search_all_connections_filter(parent_filter, child_filter);
+
+        let mut parents :HashSet<String> = HashSet::new();
+        for parent in connection.clone() {
+            self.graph.insert_edge(None, parent.0.clone(), search_target.to_string());
+            parents.insert(parent.0);
         }
         parents
     }
 
     fn search_child(&mut self, search_target: String)  -> HashSet<String>{
-        let mut children:HashSet<String> = self.search_all_children(search_target.clone());
+        let mut parent_filter:HashMap <String, String> = HashMap::new();
+        parent_filter.insert("function".to_string(), search_target.clone());
+        let mut child_filter:HashMap <String, String> = HashMap::new();
+        child_filter.insert("function".to_string(),".".to_string());
 
-        for child in children.clone() {
-            self.graph.insert_edge(None, search_target.to_string(), child);
+        let connection :HashSet<(String, String)> = self.search_all_connections_filter(parent_filter, child_filter);
+
+        let mut children :HashSet<String> = HashSet::new();
+        for child in connection.clone() {
+            self.graph.insert_edge(None, search_target.to_string(), child.1.clone());
+            children.insert(child.1);
         }
         children
     }
@@ -668,6 +377,16 @@ impl searcher::LSPInterface for parser {
         }
 
         result
+    }
+
+    fn search_connection_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
+        let parents:HashSet<(String, String)> = self.search_all_connections_filter(parent_filter.clone(), child_filter.clone());
+
+        for parent in parents.clone() {
+            //self.graph.insert((parent, search_target.clone()));
+
+        }
+        parents
     }
 }
 

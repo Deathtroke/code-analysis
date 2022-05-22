@@ -1,5 +1,6 @@
-use std::collections::HashSet;
-use lsp_types::DocumentSymbolResponse;
+use std::collections::{HashMap, HashSet};
+use lsp_types::{DocumentSymbolResponse, SymbolKind};
+use regex::Regex;
 use crate::lang_server;
 use crate::lang_server::LanguageServer;
 
@@ -8,8 +9,10 @@ pub trait LSPInterface {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
     fn search_child(&mut self, search_target: String)  -> HashSet<String>;
     fn paren_child_exists(&mut self, parent: String, child: String) -> bool;
+    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
 
-}
+
+    }
 
 pub(crate) struct LSPServer {
     lang_server : Box<dyn LanguageServer>,
@@ -143,6 +146,104 @@ impl LSPServer {
                         break;
                     }
 
+                }
+            },
+            None => {
+                println!("no symbols found");
+            }
+        }
+
+        result
+    }
+
+    pub(crate) fn search_child_single_document_filter(&mut self, func_filter: Regex, mut child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+        let mut result: HashSet<(String, String)> = HashSet::new();
+        let document = self.lang_server.document_open(document_name).unwrap();
+
+        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        if child_filter.contains_key("file") {
+            file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
+        }
+        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        if child_filter.contains_key("function") {
+            func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
+        }
+
+        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+        match doc_symbol {
+            Some(DocumentSymbolResponse::Flat(_)) => {
+                println!("unsupported symbols found");
+            },
+            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                for symbol in doc_symbols {
+                    if symbol.kind == SymbolKind::FUNCTION {
+                        let func_name = symbol.name;
+                        //println!("func {}", func_name);
+                        if func_filter.is_match(func_name.as_str()) {
+                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            if call_hierarchy_array.len() > 0 {
+                                let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
+                                for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                    if func_filter_c.is_match(outgoing_call.to.name.as_str()) &&
+                                        file_filter_c.is_match(outgoing_call.to.uri.as_str()) {
+                                        result.insert((func_name.clone(), outgoing_call.to.name.to_string()));
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            },
+            None => {
+                println!("no symbols found");
+            }
+        }
+
+        result
+    }
+
+    pub(crate) fn search_parent_single_document_filter(&mut self, func_filter: Regex, mut parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+        let mut result: HashSet<(String, String)> = HashSet::new();
+        let document = self.lang_server.document_open(document_name).unwrap();
+
+        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        if parent_filter.contains_key("file") {
+            file_filter_c = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
+        }
+        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        if parent_filter.contains_key("function") {
+            func_filter_c = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
+        }
+
+        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+        match doc_symbol {
+            Some(DocumentSymbolResponse::Flat(_)) => {
+                println!("unsupported symbols found");
+            },
+            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                for symbol in doc_symbols {
+                    if symbol.kind == SymbolKind::FUNCTION {
+                        let func_name = symbol.name;
+                        //println!("{}", func_name);
+                        if func_filter.is_match(func_name.as_str()) {
+                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            if call_hierarchy_array.len() > 0 {
+                                let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
+                                for incoming_call in incoming_calls.unwrap().unwrap() {
+                                    if func_filter_c.is_match(incoming_call.from.name.as_str()) &&
+                                        file_filter_c.is_match(incoming_call.from.uri.as_str()) {
+                                        result.insert((incoming_call.from.name.to_string(), func_name.clone()));
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
                 }
             },
             None => {
