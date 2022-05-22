@@ -19,11 +19,11 @@ use regex::Regex;
 #[derive(StructOpt, Debug)]
 #[structopt()]
 pub struct Opt {
-    #[structopt(short = "q", long = "query", default_value = r#"{@fanotify_resolve_remap}"#)]
+    #[structopt(short = "q", long = "query")]
     query: String,
     #[structopt(short = "o", long = "output-file")]
     output: Option<String>,
-    #[structopt(short = "p", long = "project-path", default_value = "/Users/hannes.boerner/Documents/criu/criu")]
+    #[structopt(short = "p", long = "project-path")]
     project_path: String,
 }
 
