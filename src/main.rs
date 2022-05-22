@@ -11,6 +11,8 @@ use structopt::StructOpt;
 
 mod parser;
 mod lang_server;
+mod graph;
+mod searcher;
 
 use regex::Regex;
 
