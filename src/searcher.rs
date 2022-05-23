@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
-use crate::lang_server;
+use crate::{lang_server, parser};
 use crate::lang_server::LanguageServer;
 
 
@@ -10,6 +10,7 @@ pub trait LSPInterface {
     fn search_child(&mut self, search_target: String)  -> HashSet<String>;
     fn paren_child_exists(&mut self, parent: String, child: String) -> bool;
     fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
+    fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>;
 
 
     }
@@ -18,7 +19,7 @@ pub(crate) struct LSPServer {
     lang_server : Box<dyn LanguageServer>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Debug)]
 pub struct FunctionEdge {
     pub(crate) function_name: String,
 }

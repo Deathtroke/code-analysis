@@ -35,9 +35,19 @@ impl LSPInterface for parser {
 
     fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
-        for parent in parent_filter {
-            for child in child_filter {
+        for parent in parent_filter.clone() {
+            for child in child_filter.clone() {
                 result.insert((parent.1.clone(), child.1.clone()));
+            }
+        }
+        result
+    }
+
+    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, String>>) -> HashSet<FunctionEdge> {
+        let mut result :HashSet<FunctionEdge> = HashSet::new();
+        for f in filter {
+            if f.contains_key(&FilterName::Function) {
+                result.insert(FunctionEdge{ function_name: f.get(&FilterName::Function).unwrap().clone()});
             }
         }
         result

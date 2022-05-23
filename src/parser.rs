@@ -35,14 +35,14 @@ pub struct parser {
     //global_filter :HashSet<(String, String)>
 }
 
-#[derive(Eq, Hash, PartialEq)]
-enum FilterName {
+#[derive(Eq, Hash, PartialEq, Debug)]
+pub enum FilterName {
     Function,
     File,
 }
 
-
-struct Filter {
+#[derive(Debug)]
+pub struct Filter {
     filter: HashMap<FilterName, Regex>,
 }
 
@@ -210,7 +210,7 @@ impl parser {
                     filter = self.parse_predefined_ident(inner_pair, filter);
                 }
                 Rule::ident => {
-                    filter.insert(FilterName::Function, inner_pair.to_string());
+                    filter.insert(FilterName::Function, inner_pair.as_str().to_string());
                 }
                 _ => {}
             }
@@ -361,50 +361,6 @@ impl parser {
         }
         connections
     }
-
-    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, String>>) -> HashSet<searcher::FunctionEdge>{
-        let mut func_names :HashSet<searcher::FunctionEdge> = HashSet::new();
-        for f in filter{
-            let mut file_filter = Regex::new(".").unwrap();
-            if f.contains_key(&FilterName::File){
-                let regex = f.get(&FilterName::File).unwrap();
-                file_filter = Regex::new(regex.clone().as_str()).unwrap();
-            }
-
-            let mut function_filter = Regex::new(".").unwrap();
-            if f.contains_key(&FilterName::Function){
-                let regex = f.get(&FilterName::Function).unwrap();
-                function_filter = Regex::new(regex.as_str()).unwrap();
-            }
-            for file_path in self.files_in_project.clone(){
-                if file_filter.is_match(file_path.as_str()) {
-                    let path = self.project_path.clone() + "/" + file_path.as_str();
-                    let mut file = match File::open(&path) {
-                        Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file
-                    };
-                    let mut s = String::new();
-                    match file.read_to_string(&mut s) {
-                        Err(why) => panic!("could not read: {}", why),
-                        Ok(_) => {}
-                    }
-
-                    let need_lsp = function_filter.is_match(s.as_str());
-
-                    if need_lsp
-                    {
-
-                        let names = self.lang_server.find_functions_in_doc(function_filter.clone(), file_path.as_str());
-                        for name in names {
-                            func_names.insert( FunctionEdge{function_name: name.clone()});
-                        }
-                    }
-                }
-            }
-        }
-
-        func_names
-    }
 }
 
 #[cfg(not(test))]
@@ -460,6 +416,50 @@ impl searcher::LSPInterface for parser {
 
         }
         parents
+    }
+
+    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, String>>) -> HashSet<searcher::FunctionEdge>{
+        let mut func_names :HashSet<searcher::FunctionEdge> = HashSet::new();
+        for f in filter{
+            let mut file_filter = Regex::new(".").unwrap();
+            if f.contains_key(&FilterName::File){
+                let regex = f.get(&FilterName::File).unwrap();
+                file_filter = Regex::new(regex.clone().as_str()).unwrap();
+            }
+
+            let mut function_filter = Regex::new(".").unwrap();
+            if f.contains_key(&FilterName::Function){
+                let regex = f.get(&FilterName::Function).unwrap();
+                function_filter = Regex::new(regex.as_str()).unwrap();
+            }
+            for file_path in self.files_in_project.clone(){
+                if file_filter.is_match(file_path.as_str()) {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
+
+                    let need_lsp = function_filter.is_match(s.as_str());
+
+                    if need_lsp
+                    {
+
+                        let names = self.lang_server.find_functions_in_doc(function_filter.clone(), file_path.as_str());
+                        for name in names {
+                            func_names.insert( FunctionEdge{function_name: name.clone()});
+                        }
+                    }
+                }
+            }
+        }
+
+        func_names
     }
 }
 
