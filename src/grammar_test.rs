@@ -1,8 +1,6 @@
 // Note this useful idiom: importing names from outer (for mod tests) scope.
 use super::*;
 use pest::iterators::Pair;
-use juniper::parser::Parser;
-use std::collections::HashMap;
 use regex::Regex;
 
 #[test]

@@ -1,11 +1,9 @@
-use std::collections::HashSet;
 use std::fs;
 use std::str;
 use std::process::{Command, Child, Stdio};
 use std::io::{BufReader, BufRead, Read, Write};
 use std::marker::PhantomData;
 use std::fmt;
-use json::Null;
 
 use log;
 use log::{debug, trace};

@@ -3,7 +3,6 @@ use lsp_types::*;
 use lsp_types::notification::{DidOpenTextDocument, Initialized, Exit};
 use lsp_types::notification::Notification as LspNotification;
 use lsp_types::request::Request as LspRequest;
-use serde::Serialize;
 use tabbycat;
 
 use structopt;
@@ -14,7 +13,6 @@ mod lang_server;
 mod graph;
 mod searcher;
 
-use regex::Regex;
 
 #[derive(StructOpt, Debug)]
 #[structopt()]

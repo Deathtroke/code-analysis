@@ -1,24 +1,14 @@
-use std::any::Any;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::{Pair, Pairs};
-use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet};
 use std::string::String;
 use super::*;
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
-use std::path::Path;
-use anyhow;
-use tabbycat;
 
-use std::{thread, time};
-use json::Error;
-use json::JsonValue::String as OtherString;
-use juniper::GraphQLType;
 use regex::Regex;
-use stderrlog::new;
 
 use crate::searcher::{FunctionEdge, LSPInterface, MatchFunctionEdge};
 
@@ -39,11 +29,6 @@ pub struct parser {
 pub enum FilterName {
     Function,
     File,
-}
-
-#[derive(Debug)]
-pub struct Filter {
-    filter: HashMap<FilterName, Regex>,
 }
 
 pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
@@ -73,7 +58,7 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
 
 impl parser {
     pub fn new(project_path: String) -> parser {
-        let mut p = parser{
+        let p = parser{
             graph: graph::Graph {
                 edges: HashSet::new(),
             },
@@ -203,7 +188,6 @@ impl parser {
 
     fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
         let mut filter: HashMap<FilterName, String> = HashMap::new();
-        let mut name = ".";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::predefined_ident => {
@@ -275,7 +259,7 @@ impl parser {
         }
     }
 
-    fn search_all_connections_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
+    fn search_all_connections_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
         let mut connections:HashSet<(String, String)> = HashSet::new();
 
         let mut file_filter_p= Regex::new(".").unwrap(); //any
@@ -408,7 +392,7 @@ impl searcher::LSPInterface for parser {
         result
     }
 
-    fn search_connection_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
+    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
         let parents:HashSet<(String, String)> = self.search_all_connections_filter(parent_filter.clone(), child_filter.clone());
 
         for parent in parents.clone() {
