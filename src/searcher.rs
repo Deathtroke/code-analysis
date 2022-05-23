@@ -240,7 +240,6 @@ impl LSPServer {
                                         result.insert((incoming_call.from.name.to_string(), func_name.clone()));
                                     }
                                 }
-                                break;
                             }
                         }
                     }
@@ -254,4 +253,34 @@ impl LSPServer {
         result
     }
 
+    pub(crate) fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String> {
+        let mut result = HashSet::new();
+        let document_res = self.lang_server.document_open(document_name);
+        if document_res.is_ok() {
+            let document = document_res.unwrap();
+
+            let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+            match doc_symbol {
+                Some(DocumentSymbolResponse::Flat(_)) => {
+                    println!("unsupported symbols found");
+                },
+                Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                    for symbol in doc_symbols {
+                        if symbol.kind == SymbolKind::FUNCTION {
+                            let func_name = symbol.name;
+                            //println!("{}", func_name);
+                            if func_filter.is_match(func_name.as_str()) {
+                                result.insert(func_name.to_string());
+                            }
+                        }
+                    }
+                },
+                None => {
+                    println!("no symbols found");
+                }
+            }
+        }
+        result
+    }
 }

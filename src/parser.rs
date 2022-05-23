@@ -149,7 +149,7 @@ impl parser {
 */
 
     fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<String>) -> HashSet<String> {
-        let mut parent_filter: Vec<HashMap<FilterName, Regex>> = Vec::new();
+        let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
         let mut child_names: HashSet<String> = HashSet::new();
         let mut do_search = false;
         for inner_pair in pair.to_owned().into_inner() {
@@ -201,8 +201,8 @@ impl parser {
         parents
     }
 
-    fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, Regex>{
-        let mut filter: HashMap<FilterName, Regex> = HashMap::new();
+    fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
+        let mut filter: HashMap<FilterName, String> = HashMap::new();
         let mut name = ".";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -210,7 +210,7 @@ impl parser {
                     filter = self.parse_predefined_ident(inner_pair, filter);
                 }
                 Rule::ident => {
-                    filter.insert(FilterName::Function, Regex::new(inner_pair.as_str()).unwrap());
+                    filter.insert(FilterName::Function, inner_pair.to_string());
                 }
                 _ => {}
             }
@@ -219,7 +219,7 @@ impl parser {
         filter
     }
 
-    fn parse_predefined_ident(&mut self, pair: Pair<Rule>, mut filter: HashMap<FilterName, Regex>) -> HashMap<FilterName, Regex> {
+    fn parse_predefined_ident(&mut self, pair: Pair<Rule>, mut filter: HashMap<FilterName, String>) -> HashMap<FilterName, String> {
         let mut predefined_identifier_text = "";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -241,36 +241,32 @@ impl parser {
         filter
     }
 
-    fn parse_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, Regex)> {
+    fn parse_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, String)> {
         let mut filter_name = "";
-        let mut value:String = String::new();
+        let mut value = "";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::ident => {
                     filter_name = inner_pair.as_str();
                 }
                 Rule::regex => {
-                    value = inner_pair.to_string();
+                    value = inner_pair.as_str();
                 }
                 _ => {}
             }
-        }
-        let regex = Regex::new(value.as_str());
-        if regex.is_err(){
-            return None
         }
 
         match filter_name.to_lowercase().as_str(){
             "function" => {
                 Some(
                     (FilterName::Function,
-                    regex.unwrap())
+                    value.to_string())
                 )
             }
             "file" => {
                 Some(
                     (FilterName::File,
-                     regex.unwrap())
+                     value.to_string())
                 )
             }
             _ => {
@@ -366,23 +362,47 @@ impl parser {
         connections
     }
 
-    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, Regex>>) -> HashSet<searcher::FunctionEdge>{
+    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, String>>) -> HashSet<searcher::FunctionEdge>{
         let mut func_names :HashSet<searcher::FunctionEdge> = HashSet::new();
         for f in filter{
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&FilterName::File){
                 let regex = f.get(&FilterName::File).unwrap();
-                file_filter = regex.clone();
+                file_filter = Regex::new(regex.clone().as_str()).unwrap();
             }
 
+            let mut function_filter = Regex::new(".").unwrap();
+            if f.contains_key(&FilterName::Function){
+                let regex = f.get(&FilterName::Function).unwrap();
+                function_filter = Regex::new(regex.as_str()).unwrap();
+            }
             for file_path in self.files_in_project.clone(){
                 if file_filter.is_match(file_path.as_str()) {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
 
-                    func_names.insert(FunctionEdge{function_name: f.get(&FilterName::Function).unwrap().to_string()});
-                    //todo!()
+                    let need_lsp = function_filter.is_match(s.as_str());
+
+                    if need_lsp
+                    {
+
+                        let names = self.lang_server.find_functions_in_doc(function_filter.clone(), file_path.as_str());
+                        for name in names {
+                            func_names.insert( FunctionEdge{function_name: name.clone()});
+                        }
+                    }
                 }
             }
         }
+
         func_names
     }
 }
