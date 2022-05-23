@@ -1,5 +1,5 @@
 use super::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 #[cfg(test)]
 impl LSPInterface for parser {
@@ -30,6 +30,16 @@ impl LSPInterface for parser {
 
         }
 
+        result
+    }
+
+    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
+        let mut result: HashSet<(String, String)> = HashSet::new();
+        for parent in parent_filter {
+            for child in child_filter {
+                result.insert((parent.1.clone(), child.1.clone()));
+            }
+        }
         result
     }
 }
@@ -68,6 +78,6 @@ fn test_parser() {
         ("parent2".to_string(), "parent1".to_string()),
         ("parent2".to_string(), "parent2".to_string())]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
-    let g : tabbycat::Graph = parser.graph.try_into().unwrap();
-    assert_eq!(g.to_string(), "This test is unusable")
+    //let g : tabbycat::Graph = parser.graph.try_into().unwrap();
+    //assert_eq!(g.to_string(), "This test is unusable")
 }
