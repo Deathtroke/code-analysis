@@ -2,7 +2,7 @@ use std::any::Any;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::{Pair, Pairs};
-use std::borrow::Borrow;
+use std::borrow::{Borrow, BorrowMut};
 use std::collections::{HashMap, HashSet};
 use std::string::String;
 use super::*;
@@ -20,7 +20,7 @@ use juniper::GraphQLType;
 use regex::Regex;
 use stderrlog::new;
 
-use crate::searcher::LSPInterface;
+use crate::searcher::{FunctionEdge, LSPInterface, MatchFunctionEdge};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -35,6 +35,16 @@ pub struct parser {
     //global_filter :HashSet<(String, String)>
 }
 
+#[derive(Eq, Hash, PartialEq)]
+enum FilterName {
+    Function,
+    File,
+}
+
+
+struct Filter {
+    filter: HashMap<FilterName, Regex>,
+}
 
 pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
     let pair = MyParser::parse(Rule::query, input);
@@ -139,15 +149,14 @@ impl parser {
 */
 
     fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<String>) -> HashSet<String> {
-        let mut parent_names: HashSet<String> = HashSet::new();
+        let mut parent_filter: Vec<HashMap<FilterName, Regex>> = Vec::new();
         let mut child_names: HashSet<String> = HashSet::new();
         let mut do_search = false;
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::verb => {
-                    let mut name = inner_pair.as_str();
-                    name = name.strip_prefix("@").unwrap();
-                    parent_names.insert(name.to_string());
+                    let filter = self.parse_verb(inner_pair);
+                    parent_filter.push(filter);
                 }
                 Rule::scope => {
                     do_search = true;
@@ -162,22 +171,23 @@ impl parser {
                 _ => {}
             }
         }
-        if  parent_names.len() > 0 {
-            for parent in parent_names {
+        if  parent_filter.len() > 0 {
+            let parent_names = self.find_func_name(parent_filter);
+            for mut parent in parent_names {
                 if child_names.len() > 0 {
                     for child in child_names.clone() {
-                        if self.paren_child_exists(parent.clone(), child) {
-                            parents.insert(parent.clone());
+                        if self.paren_child_exists(parent.get_func_name(), child) {
+                            parents.insert(parent.get_func_name());
                         }
                     }
                 } else {
                     if do_search {
-                        let children = self.search_child(parent.clone());
+                        let children = self.search_child(parent.get_func_name());
                         if children.len() > 0 {
-                            parents.insert(parent.clone());
+                            parents.insert(parent.get_func_name());
                         }
                     } else {
-                        parents.insert(parent.clone());
+                        parents.insert(parent.get_func_name());
                     }
                 }
             }
@@ -191,28 +201,25 @@ impl parser {
         parents
     }
 
-    fn parse_verb(&mut self, pair: Pair<Rule>) -> String{
+    fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, Regex>{
+        let mut filter: HashMap<FilterName, Regex> = HashMap::new();
         let mut name = ".";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::predefined_ident => {
-
+                    filter = self.parse_predefined_ident(inner_pair, filter);
                 }
                 Rule::ident => {
-                    name = inner_pair.as_str();
-                    name = name.strip_prefix("@").unwrap();
-                    while name.chars().last().unwrap() == ' '{
-                        name = name.strip_suffix(" ").unwrap();
-                    }
+                    filter.insert(FilterName::Function, Regex::new(inner_pair.as_str()).unwrap());
                 }
                 _ => {}
             }
         }
 
-        name.to_string()
+        filter
     }
 
-    fn parse_predefined_ident(&mut self, pair: Pair<Rule>, mut filter: HashSet<(String, String)>){
+    fn parse_predefined_ident(&mut self, pair: Pair<Rule>, mut filter: HashMap<FilterName, Regex>) -> HashMap<FilterName, Regex> {
         let mut predefined_identifier_text = "";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -221,21 +228,26 @@ impl parser {
                 }
                 Rule::define_options => {
                     if predefined_identifier_text =="filter" {
-                        filter.insert(self.parse_define_options(inner_pair));
+                        let filter_option = self.parse_define_options(inner_pair);
+                        if filter_option.is_some(){
+                            let filter_option_unwrap = filter_option.unwrap();
+                            filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
+                        }
                     }
                 }
                 _ => {}
             }
         }
+        filter
     }
 
-    fn parse_define_options(&mut self, pair: Pair<Rule>) -> (String, String) {
-        let mut attribute :String = String::new();
+    fn parse_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, Regex)> {
+        let mut filter_name = "";
         let mut value:String = String::new();
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::ident => {
-                    attribute = inner_pair.to_string();
+                    filter_name = inner_pair.as_str();
                 }
                 Rule::regex => {
                     value = inner_pair.to_string();
@@ -243,7 +255,28 @@ impl parser {
                 _ => {}
             }
         }
-        (attribute, value)
+        let regex = Regex::new(value.as_str());
+        if regex.is_err(){
+            return None
+        }
+
+        match filter_name.to_lowercase().as_str(){
+            "function" => {
+                Some(
+                    (FilterName::Function,
+                    regex.unwrap())
+                )
+            }
+            "file" => {
+                Some(
+                    (FilterName::File,
+                     regex.unwrap())
+                )
+            }
+            _ => {
+                None
+            }
+        }
     }
 
     fn search_all_connections_filter(&mut self, mut parent_filter: HashMap<String, String>, mut child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
@@ -331,6 +364,26 @@ impl parser {
             }
         }
         connections
+    }
+
+    fn find_func_name(&mut self, filter: Vec<HashMap<FilterName, Regex>>) -> HashSet<searcher::FunctionEdge>{
+        let mut func_names :HashSet<searcher::FunctionEdge> = HashSet::new();
+        for f in filter{
+            let mut file_filter = Regex::new(".").unwrap();
+            if f.contains_key(&FilterName::File){
+                let regex = f.get(&FilterName::File).unwrap();
+                file_filter = regex.clone();
+            }
+
+            for file_path in self.files_in_project.clone(){
+                if file_filter.is_match(file_path.as_str()) {
+
+                    func_names.insert(FunctionEdge{function_name: f.get(&FilterName::Function).unwrap().to_string()});
+                    //todo!()
+                }
+            }
+        }
+        func_names
     }
 }
 

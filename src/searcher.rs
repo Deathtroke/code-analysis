@@ -18,9 +18,9 @@ pub(crate) struct LSPServer {
     lang_server : Box<dyn LanguageServer>,
 }
 
-
+#[derive(Eq, Hash, PartialEq)]
 pub struct FunctionEdge {
-    function_name: String,
+    pub(crate) function_name: String,
 }
 
 pub trait MatchFunctionEdge {

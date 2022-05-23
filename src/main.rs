@@ -40,10 +40,6 @@ fn try_main() -> anyhow::Result<()> {
 
     let mut parser = parser::parser::new(opt.project_path);
 
-
-    let re = Regex::new(r".").unwrap();
-    println!("regex test: {}", re.is_match("abcabc"));
-
     parser.parse(opt.query.as_str());
 
     let mut out : Box<dyn std::io::Write> = if let Some(filename) = opt.output {
