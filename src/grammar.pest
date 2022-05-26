@@ -2,8 +2,8 @@ COMMENT = _{ "NB." ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{((" ")  | "\t")+}
 ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*}
 regex = @{(ASCII_ALPHANUMERIC | "\\" | "." | "-" | "!" | "?" | "=" | ":" | "*" | "{" | "}" | "(" | ")" | "[" | "]" | "_")+}
-named_parameter = {ident ~ "=\"" ~ regex ~ "\""}
-verb = { "@" ~ ident ~ ("(" ~ named_parameter ~ ("," ~ named_parameter)* ~ ")")?}
+named_parameter = ${ident ~ "=\"" ~ regex ~ "\""}
+verb = ${ "@" ~ ident ~ ("(" ~ named_parameter ~ ("," ~ named_parameter)* ~ ")")?}
 scope = { "{" ~ statements ~ "}" }
 statement = {verb* ~ scope?}
 statements = { NEWLINE* ~ (statement ~ (";" | NEWLINE)+)* ~ statement? }

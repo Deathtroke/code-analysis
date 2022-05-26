@@ -1,3 +1,4 @@
+use pest::error::InputLocation;
 // Note this useful idiom: importing names from outer (for mod tests) scope.
 use super::*;
 use pest::iterators::Pair;
@@ -186,6 +187,14 @@ fn test_grammar2() {
     }
 
     assert_eq!(i, 3);
+}
+
+#[test]
+fn test_wrong_space() {
+    let input = r#"{@ tar}"#;
+    let result= parser::parse_grammar(input);
+    assert!(result.is_err());
+    assert_eq!(result.err().unwrap().location, InputLocation::Pos(2));
 }
 
 #[test]
