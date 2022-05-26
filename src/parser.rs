@@ -193,6 +193,7 @@ impl parser {
             match inner_pair.as_rule() {
                 Rule::ident => {
                     ident = inner_pair.as_str();
+                    filter.insert(FilterName::Function, ident.to_string());
                 }
                 Rule::named_parameter => {
                     let filter_option = self.parse_define_options(inner_pair);
