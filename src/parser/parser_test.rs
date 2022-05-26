@@ -1,10 +1,16 @@
 use super::*;
 use std::collections::HashSet;
-use crate::searcher::SomeLSPServer;
 
 #[cfg(test)]
 struct MockLSPServer;
-impl LSPInterface for MockLSPServer {
+
+impl MockLSPServer{
+    fn new() -> Box<dyn LSPServer> {
+        Box::new(MockLSPServer)
+    }
+}
+
+impl LSPServer for MockLSPServer {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
         let parents :HashSet<String> = HashSet::from(["parent1".to_string(), "parent2".to_string()]);
 
@@ -60,8 +66,7 @@ impl LSPInterface for MockLSPServer {
 #[test]
 fn test_parser_simple1() {
     let input = r#"{@func}"#;
-    let lsp_mock: SomeLSPServer = SomeLSPServer{ 0: Box::new(MockLSPServer)};
-    let mut parser = parser::new("".to_string(), lsp_mock);
+    let mut parser = parser::new("".to_string(), MockLSPServer::new());
     let parser_output = HashSet::from([FunctionEdge{function_name: "parent1".to_string(), document: "".to_string() }, FunctionEdge{function_name: "parent2".to_string(), document: "".to_string() }]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([("parent1".to_string(), "func".to_string()), ("parent2".to_string(), "func".to_string())]);
@@ -71,8 +76,7 @@ fn test_parser_simple1() {
 #[test]
 fn test_parser_simple2() {
     let input = r#"@func {}"#;
-    let lsp_mock: SomeLSPServer = SomeLSPServer{ 0: Box::new(MockLSPServer)};
-    let mut parser = parser::new("".to_string(), lsp_mock);
+    let mut parser = parser::new("".to_string(), MockLSPServer::new());
     let parser_output = HashSet::from([ FunctionEdge{function_name: "func".to_string(), document: "".to_string() }]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([("func".to_string(), "child1".to_string()), ("func".to_string(), "child2".to_string())]);
@@ -82,8 +86,7 @@ fn test_parser_simple2() {
 #[test]
 fn test_parser() {
     let input = r#"{{@func}}"#;
-    let lsp_mock: SomeLSPServer = SomeLSPServer{ 0: Box::new(MockLSPServer)};
-    let mut parser = parser::new("".to_string(), lsp_mock);
+    let mut parser = parser::new("".to_string(), MockLSPServer::new());
     let parser_output = HashSet::from([FunctionEdge{function_name: "parent1".to_string(), document: "".to_string() }, FunctionEdge{function_name: "parent2".to_string(), document: "".to_string() }]);
     assert_eq!(parser.parse(input), parser_output);
     let graph_output = HashSet::from([

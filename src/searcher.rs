@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 
-pub trait LSPInterface {
+pub trait LSPServer {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
     fn search_child(&mut self, search_target: String)  -> HashSet<String>;
     fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
@@ -37,42 +37,7 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
     files
 }
 
-pub struct SomeLSPServer (pub(crate) Box<dyn LSPInterface>);
-
-impl SomeLSPServer {
-    pub fn new(project_path: String) -> SomeLSPServer {
-        SomeLSPServer {
-            0: Box::new(LSPServer::new(project_path))
-        }
-    }
-
-    pub fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
-        self.0.search_parent(search_target)
-    }
-    pub fn search_child(&mut self, search_target: String)  -> HashSet<String>{
-        self.0.search_child(search_target)
-    }
-    pub fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
-        self.0.search_connection_filter(parent_filter, child_filter)
-    }
-    pub fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>{
-        self.0.find_func_name(filter)
-    }
-    pub fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
-        self.0.search_child_single_document_filter(func_filter, child_filter, document_name)
-    }
-    pub fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>{
-        self.0.search_parent_single_document_filter(func_filter, parent_filter,document_name)
-    }
-    pub fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
-        self.0.find_link(parent_name, child_name, document_name)
-    }
-    pub fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String>{
-        self.0.find_functions_in_doc(func_filter, document_name)
-    }
-}
-
-pub struct LSPServer {
+pub struct ClangdServer {
     pub lang_server : Box<dyn LanguageServer>,
     pub files_in_project: Vec<String>,
     pub project_path: String,
@@ -95,7 +60,7 @@ pub trait ForcedEdge : MatchFunctionEdge{
 }
 
 pub trait DefaultEdge: MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge, lsp_server: LSPServer) -> bool;
+    fn do_match(&mut self, match_target: FunctionEdge, lsp_server: &dyn LSPServer) -> bool;
 }
 
 impl MatchFunctionEdge for FunctionEdge {
@@ -110,15 +75,15 @@ impl ForcedEdge for FunctionEdge {
     }
 }
 
-impl DefaultEdge for FunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge, mut lsp_server: LSPServer) -> bool {
-        lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
-    }
-}
+// impl DefaultEdge for FunctionEdge {
+//     fn do_match(&mut self, match_target: FunctionEdge, mut lsp_server: &dyn LSPServer) -> bool {
+//         lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
+//     }
+// }
 
-impl LSPServer {
-    pub fn new(project_path: String) -> LSPServer {
-        let mut lsp_server = LSPServer{
+impl ClangdServer {
+    pub fn new(project_path: String) -> Box<dyn LSPServer> {
+        let mut lsp_server = Self{
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server("/usr/bin/clangd".to_owned())
                 .project(project_path.to_owned())
@@ -132,12 +97,12 @@ impl LSPServer {
         if res.is_err(){
             println!("LSP server didn't initialize: {:?}", res.err())
         }
-        lsp_server
+        Box::new(lsp_server)
     }
 }
 
 
-impl LSPInterface for LSPServer {
+impl LSPServer for ClangdServer {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
         let mut parent_filter:HashMap <String, String> = HashMap::new();
         parent_filter.insert("function".to_string(), ".".to_string());

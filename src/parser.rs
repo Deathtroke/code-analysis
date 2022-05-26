@@ -12,7 +12,7 @@ use std::io::prelude::*;
 
 use regex::Regex;
 
-use crate::searcher::{ForcedEdge, FunctionEdge, LSPInterface, MatchFunctionEdge};
+use crate::searcher::{ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -20,7 +20,7 @@ struct MyParser;
 
 pub struct parser {
     pub graph : graph::Graph,
-    lang_server : searcher::SomeLSPServer,
+    lang_server : Box<dyn searcher::LSPServer>,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
     //global_filter :HashSet<(String, String)>
 }
@@ -39,7 +39,7 @@ pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule
 }
 
 impl parser {
-    pub fn new(project_path: String, lsp_server: searcher::SomeLSPServer) -> parser {
+    pub fn new(project_path: String, lsp_server: Box<dyn searcher::LSPServer>) -> parser {
         let p = parser{
             graph: graph::Graph {
                 edges: HashSet::new(),
