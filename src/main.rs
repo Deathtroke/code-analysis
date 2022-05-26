@@ -7,6 +7,7 @@ use tabbycat;
 
 use structopt;
 use structopt::StructOpt;
+use crate::searcher::LSPInterface;
 
 mod parser;
 mod lang_server;
@@ -36,7 +37,9 @@ fn main() {
 fn try_main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
-    let mut parser = parser::parser::new(opt.project_path);
+    //let lsp_server: searcher::LSPServer = searcher::LSPServer::new(opt.project_path);
+    let lsp_server = searcher::SomeLSPServer::new(opt.project_path.clone());
+    let mut parser = parser::parser::new(opt.project_path, lsp_server);
 
     parser.parse(opt.query.as_str());
 

@@ -3,24 +3,84 @@ use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
 use crate::{lang_server, parser};
 use crate::lang_server::LanguageServer;
+use std::fs;
+use std::fs::File;
+use std::io::prelude::*;
 
 
 pub trait LSPInterface {
     fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
     fn search_child(&mut self, search_target: String)  -> HashSet<String>;
-    fn paren_child_exists(&mut self, parent: String, child: String) -> bool;
     fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
     fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>;
-
-
+    fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
+    fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
+    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
+    fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String>;
     }
 
+fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
+    let mut files :Vec<String> = Vec::new();
+    let paths = fs::read_dir(dir.clone()).unwrap();
+
+    for path in paths {
+        let path_str = path.as_ref().unwrap().path().to_str().unwrap().to_string();
+        if path.as_ref().unwrap().metadata().unwrap().is_dir() {
+            let mut subfolder = get_all_files_in_project(path_str, project_path.clone());
+            files.append(&mut subfolder);
+        } else {
+            if path_str.ends_with(".cpp") || path_str.ends_with(".c"){
+                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"),""));
+            }
+        }
+    }
+    files
+}
+
+pub struct SomeLSPServer (Box<dyn LSPInterface>);
+
+impl SomeLSPServer {
+    pub fn new(project_path: String) -> SomeLSPServer {
+        SomeLSPServer {
+            0: Box::new(LSPServer::new(project_path))
+        }
+    }
+
+    pub fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
+        self.0.search_parent(search_target)
+    }
+    pub fn search_child(&mut self, search_target: String)  -> HashSet<String>{
+        self.0.search_child(search_target)
+    }
+    pub fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>{
+        self.0.search_connection_filter(parent_filter, child_filter)
+    }
+    pub fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>{
+        self.0.find_func_name(filter)
+    }
+    pub fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+        self.0.search_child_single_document_filter(func_filter, child_filter, document_name)
+    }
+    pub fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>{
+        self.0.search_parent_single_document_filter(func_filter, parent_filter,document_name)
+    }
+    pub fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
+        self.0.find_link(parent_name, child_name, document_name)
+    }
+    pub fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String>{
+        self.0.find_functions_in_doc(func_filter, document_name)
+    }
+}
+
 pub struct LSPServer {
-    lang_server : Box<dyn LanguageServer>,
+    pub lang_server : Box<dyn LanguageServer>,
+    pub files_in_project: Vec<String>,
+    pub project_path: String,
+
 }
 
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct FunctionEdge {
     pub(crate) function_name: String,
     pub document: String,
@@ -65,6 +125,8 @@ impl LSPServer {
                 //.languages(language_list)
                 .launch()
                 .expect("Failed to spawn clangd"),
+            files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
+            project_path,
         };
         let res = lsp_server.lang_server.initialize();
         if res.is_err(){
@@ -72,8 +134,172 @@ impl LSPServer {
         }
         lsp_server
     }
+}
 
-    pub(crate) fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+
+impl LSPInterface for LSPServer {
+    fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
+        let mut parent_filter:HashMap <String, String> = HashMap::new();
+        parent_filter.insert("function".to_string(), ".".to_string());
+        let mut child_filter:HashMap <String, String> = HashMap::new();
+        child_filter.insert("function".to_string(),search_target.clone());
+
+        //let parents:HashSet<String> = self.search_all_parents(search_target.clone());
+        let connection :HashSet<(String, String)> = self.search_connection_filter(parent_filter, child_filter);
+
+        let mut parents :HashSet<String> = HashSet::new();
+        for parent in connection.clone() {
+            //self.graph.insert_edge(None, parent.0.clone(), search_target.to_string());
+            parents.insert(parent.0);
+        }
+        parents
+    }
+
+    fn search_child(&mut self, search_target: String)  -> HashSet<String>{
+        let mut parent_filter:HashMap <String, String> = HashMap::new();
+        parent_filter.insert("function".to_string(), search_target.clone());
+        let mut child_filter:HashMap <String, String> = HashMap::new();
+        child_filter.insert("function".to_string(),".".to_string());
+
+        let connection :HashSet<(String, String)> = self.search_connection_filter(parent_filter, child_filter);
+
+        let mut children :HashSet<String> = HashSet::new();
+        for child in connection.clone() {
+            //self.graph.insert_edge(None, search_target.to_string(), child.1.clone());
+            children.insert(child.1);
+        }
+        children
+    }
+
+    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
+        let mut connections:HashSet<(String, String)> = HashSet::new();
+
+        let mut file_filter_p= Regex::new(".").unwrap(); //any
+        if parent_filter.contains_key("file") {
+            file_filter_p = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
+        }
+        let mut func_filter_p= Regex::new(".").unwrap(); //any
+        if parent_filter.contains_key("function") {
+            func_filter_p = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
+        }
+
+        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        if child_filter.contains_key("file") {
+            file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
+        }
+        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        if child_filter.contains_key("function") {
+            func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
+        }
+
+        if (file_filter_p.as_str() == ".") && (func_filter_p.as_str() == ".") {
+
+            for file_path in self.files_in_project.clone(){
+                if file_filter_c.is_match(file_path.as_str()) {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
+
+                    let mut new_children = HashSet::new();
+                    let need_lsp = func_filter_c.is_match(s.as_str());
+                    //println!("{}", need_lsp);
+                    if need_lsp
+                    {
+                        //println!("{}, {}", file_path, search_target.clone());
+                        new_children = self.search_parent_single_document_filter(func_filter_c.clone(), parent_filter.clone(), file_path.as_str());
+                        //println!("{:?}", new_children);
+                    }
+                    for child in new_children {
+                        connections.insert(child);
+                    }
+                    //thread::sleep(time::Duration::from_secs(1));
+                }
+            }
+        } else {
+
+            for file_path in self.files_in_project.clone(){
+                if file_filter_p.is_match(file_path.as_str()) {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
+
+                    let mut new_children = HashSet::new();
+                    let need_lsp = func_filter_p.is_match(s.as_str());
+                    //println!("{}", need_lsp);
+                    if need_lsp
+                    {
+                        //println!("{}, {}", file_path, search_target.clone());
+                        new_children = self.search_child_single_document_filter(func_filter_p.clone(), child_filter.clone(), file_path.as_str());
+                        //println!("{:?}", new_children);
+                    }
+                    for child in new_children {
+                        connections.insert(child);
+                    }
+                    //thread::sleep(time::Duration::from_secs(1));
+                }
+            }
+        }
+        connections
+    }
+
+    fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>{
+        let mut func_names :HashSet<FunctionEdge> = HashSet::new();
+        for f in filter{
+            let mut file_filter = Regex::new(".").unwrap();
+            if f.contains_key(&parser::FilterName::File){
+                let regex = f.get(&parser::FilterName::File).unwrap();
+                file_filter = Regex::new(regex.clone().as_str()).unwrap();
+            }
+
+            let mut function_filter = Regex::new(".").unwrap();
+            if f.contains_key(&parser::FilterName::Function){
+                let regex = f.get(&parser::FilterName::Function).unwrap();
+                function_filter = Regex::new(regex.as_str()).unwrap();
+            }
+            for file_path in self.files_in_project.clone(){
+                if file_filter.is_match(file_path.as_str()) {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
+
+                    let need_lsp = function_filter.is_match(s.as_str());
+
+                    if need_lsp
+                    {
+
+                        let names = self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
+                        for name in names {
+                            func_names.insert( FunctionEdge{function_name: name.clone(), document: file_path.clone()});
+                        }
+                    }
+                }
+            }
+        }
+
+        func_names
+    }
+    fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
 
@@ -122,7 +348,7 @@ impl LSPServer {
         result
     }
 
-    pub(crate) fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+    fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
 
@@ -170,7 +396,7 @@ impl LSPServer {
         result
     }
 
-    pub fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool{
+    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool{
         let document_res = self.lang_server.document_open(document_name);
         if document_res.is_ok() {
             let document = document_res.unwrap();
@@ -208,7 +434,7 @@ impl LSPServer {
         false
     }
 
-    pub(crate) fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String> {
+    fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String> {
         let mut result = HashSet::new();
         let document_res = self.lang_server.document_open(document_name);
         if document_res.is_ok() {
