@@ -188,14 +188,25 @@ impl parser {
 
     fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
         let mut filter: HashMap<FilterName, String> = HashMap::new();
+        let mut ident = "";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
-                Rule::predefined_ident => {
+                Rule::ident => {
+                    ident = inner_pair.as_str();
+                }
+                Rule::define_options => {
+                    let filter_option = self.parse_define_options(inner_pair);
+                    if filter_option.is_some(){
+                        let filter_option_unwrap = filter_option.unwrap();
+                        filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
+                    }
+                }
+                /*Rule::predefined_ident => {
                     filter = self.parse_predefined_ident(inner_pair, filter);
                 }
                 Rule::ident => {
                     filter.insert(FilterName::Function, inner_pair.as_str().to_string());
-                }
+                }*/
                 _ => {}
             }
         }

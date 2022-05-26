@@ -1,10 +1,10 @@
 COMMENT = _{ "NB." ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{((" ")  | "\t")+}
 ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*}
-regex = @{(ASCII_ALPHANUMERIC | "\\" | "." | "-" | "!" | "?" | "=" | ":" | "*" | "{" | "}" | "(" | ")" | "[" | "]" | " " | "_")+}
-define_options = {ident ~ "=" ~ "\"" ~ regex ~ "\""}
-predefined_ident = {ident ~"(" ~ define_options ~ ("," ~ define_options)* ~ ")"}
-verb = { "@" ~ (predefined_ident | ident)}
+regex = @{(ASCII_ALPHANUMERIC | "\\" | "." | "-" | "!" | "?" | "=" | ":" | "*" | "{" | "}" | "(" | ")" | "[" | "]" | "_")+}
+define_options = {ident ~ "=\"" ~ regex ~ "\""}
+//predefined_ident = {ident ~"(" ~ define_options ~ ("," ~ define_options)* ~ ")"}
+verb = { "@" ~ ident ~ ("(" ~ define_options ~ ("," ~ define_options)* ~ ")")?}
 scope = { "{" ~ statements ~ "}" }
 statement = {verb* ~ scope?}
 statements = { NEWLINE* ~ (statement ~ (";" | NEWLINE)+)* ~ statement? }
