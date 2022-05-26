@@ -15,13 +15,15 @@ pub trait LSPInterface {
 
     }
 
-pub(crate) struct LSPServer {
+pub struct LSPServer {
     lang_server : Box<dyn LanguageServer>,
 }
+
 
 #[derive(Eq, Hash, PartialEq, Debug)]
 pub struct FunctionEdge {
     pub(crate) function_name: String,
+    pub document: String,
 }
 
 pub trait MatchFunctionEdge {
@@ -33,7 +35,7 @@ pub trait ForcedEdge : MatchFunctionEdge{
 }
 
 pub trait DefaultEdge: MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
+    fn do_match(&mut self, match_target: FunctionEdge, lsp_server: LSPServer) -> bool;
 }
 
 impl MatchFunctionEdge for FunctionEdge {
@@ -49,11 +51,9 @@ impl ForcedEdge for FunctionEdge {
 }
 
 impl DefaultEdge for FunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool {
-        todo!()
+    fn do_match(&mut self, match_target: FunctionEdge, mut lsp_server: LSPServer) -> bool {
+        lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
     }
-
-
 }
 
 impl LSPServer {
@@ -66,7 +66,10 @@ impl LSPServer {
                 .launch()
                 .expect("Failed to spawn clangd"),
         };
-        lsp_server.lang_server.initialize();
+        let res = lsp_server.lang_server.initialize();
+        if res.is_err(){
+            println!("LSP server didn't initialize: {:?}", res.err())
+        }
         lsp_server
     }
 
@@ -165,6 +168,44 @@ impl LSPServer {
         }
 
         result
+    }
+
+    pub fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool{
+        let document_res = self.lang_server.document_open(document_name);
+        if document_res.is_ok() {
+            let document = document_res.unwrap();
+            let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+            match doc_symbol {
+                Some(DocumentSymbolResponse::Flat(_)) => {
+                    println!("unsupported symbols found");
+                },
+                Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                    for symbol in doc_symbols {
+                        if symbol.kind == SymbolKind::FUNCTION {
+                            let func_name = symbol.name;
+                            //println!("{}", func_name);
+                            if parent_name == func_name {
+                                let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                                let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                                if call_hierarchy_array.len() > 0 {
+                                    let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
+                                    for incoming_call in incoming_calls.unwrap().unwrap() {
+                                        if incoming_call.from.name.as_str() == parent_name {
+                                            return true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                None => {
+                    println!("no symbols found");
+                }
+            }
+        }
+        false
     }
 
     pub(crate) fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String> {

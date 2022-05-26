@@ -47,7 +47,10 @@ impl LSPInterface for parser {
         let mut result :HashSet<FunctionEdge> = HashSet::new();
         for f in filter {
             if f.contains_key(&FilterName::Function) {
-                result.insert(FunctionEdge{ function_name: f.get(&FilterName::Function).unwrap().clone()});
+                result.insert(FunctionEdge{
+                    function_name: f.get(&FilterName::Function).unwrap().clone(),
+                    document: "".to_string(),
+                });
             }
         }
         result
