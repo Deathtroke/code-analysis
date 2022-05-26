@@ -436,7 +436,7 @@ impl searcher::LSPInterface for parser {
 
                         let names = self.lang_server.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            func_names.insert( FunctionEdge{function_name: name.clone()});
+                            func_names.insert( FunctionEdge{function_name: name.clone(), document: file_path.clone()});
                         }
                     }
                 }
