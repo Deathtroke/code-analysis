@@ -37,7 +37,7 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
     files
 }
 
-pub struct SomeLSPServer (Box<dyn LSPInterface>);
+pub struct SomeLSPServer (pub(crate) Box<dyn LSPInterface>);
 
 impl SomeLSPServer {
     pub fn new(project_path: String) -> SomeLSPServer {
