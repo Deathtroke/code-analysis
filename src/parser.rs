@@ -194,45 +194,17 @@ impl parser {
                 Rule::ident => {
                     ident = inner_pair.as_str();
                 }
-                Rule::define_options => {
+                Rule::named_parameter => {
                     let filter_option = self.parse_define_options(inner_pair);
                     if filter_option.is_some(){
                         let filter_option_unwrap = filter_option.unwrap();
                         filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
                     }
                 }
-                /*Rule::predefined_ident => {
-                    filter = self.parse_predefined_ident(inner_pair, filter);
-                }
-                Rule::ident => {
-                    filter.insert(FilterName::Function, inner_pair.as_str().to_string());
-                }*/
                 _ => {}
             }
         }
 
-        filter
-    }
-
-    fn parse_predefined_ident(&mut self, pair: Pair<Rule>, mut filter: HashMap<FilterName, String>) -> HashMap<FilterName, String> {
-        let mut predefined_identifier_text = "";
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::ident => {
-                    predefined_identifier_text = inner_pair.as_str();
-                }
-                Rule::define_options => {
-                    if predefined_identifier_text =="filter" {
-                        let filter_option = self.parse_define_options(inner_pair);
-                        if filter_option.is_some(){
-                            let filter_option_unwrap = filter_option.unwrap();
-                            filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
         filter
     }
 
