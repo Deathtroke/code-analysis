@@ -1,19 +1,13 @@
-use std::borrow::Borrow;
 use pest::Parser;
 use pest_derive::Parser;
 use pest::iterators::{Pair, Pairs};
 use std::collections::{HashMap, HashSet};
 use std::string::String;
 use super::*;
-use std::fs;
-use std::fs::File;
-use std::io::prelude::*;
-
 
 use regex::Regex;
 
-use crate::searcher::{ParentChildEdge, ForcedEdge, FunctionNode, LSPServer, MatchFunctionEdge};
-use crate::lang_server::Error;
+use crate::searcher::{ParentChildEdge, FunctionNode};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -42,8 +36,6 @@ pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule
 #[derive(Debug)]
 pub enum AstNode {
     Print(Box<AstNode>),
-    Ident(String),
-    Regex(Regex),
     NamedParameter {
         ident: String,
         regex: Regex,
@@ -256,9 +248,9 @@ impl PestParser {
         }
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
-            for mut parent in parent_names {
+            for parent in parent_names {
                 if child_names.to_owned().len() > 0 {
-                    for mut child in child_names.to_owned(){
+                    for child in child_names.to_owned(){
                         if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
                             self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
@@ -279,7 +271,7 @@ impl PestParser {
                 }
             }
         } else {
-            for mut child in child_names {
+            for child in child_names {
                 for parent in self.lang_server.search_parent(child.function_name.clone()) {
                     let prent_cild_edge = ParentChildEdge{
                         function_name: parent.clone(),
@@ -352,4 +344,5 @@ impl PestParser {
 
 #[cfg(test)]
 mod parser_test;
+#[cfg(test)]
 mod ast_test;

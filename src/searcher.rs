@@ -76,7 +76,7 @@ impl Hash for FunctionNode {
 
 impl PartialEq for FunctionNode {
     fn eq(&self, other: &Self) -> bool {
-        (self.document == other.document && self.function_name == other.function_name)
+        self.document == other.document && self.function_name == other.function_name
     }
 }
 
@@ -125,6 +125,7 @@ pub struct ParentChildEdge {
 
 impl MatchFunctionEdge for ForcedEdge {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+        #[allow(dead_code)]
         if false {match_target; lsp_server; unimplemented!()}
         true
     }
