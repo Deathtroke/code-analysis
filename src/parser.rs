@@ -13,6 +13,8 @@ use std::io::prelude::*;
 use regex::Regex;
 
 use crate::searcher::{ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
+use crate::lang_server::Error;
+use petgraph::matrix_graph::Nullable;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -37,6 +39,123 @@ pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule
         //.next();
     pair
 }
+
+#[derive(Debug)]
+pub enum AstNode {
+    Print(Box<AstNode>),
+    Ident(String),
+    Regex(Regex),
+    NamedParameter {
+        ident: String,
+        regex: Regex,
+    },
+    Verb {
+        ident: String,
+        named_parameter:Vec<AstNode>,
+    },
+    Scope(Box<AstNode>),
+    Statement {
+        verb: Vec<AstNode>,
+        scope: Box<Option<AstNode>>,
+    },
+    Statements(Vec<AstNode>)
+
+}
+
+pub fn parse_ast(source: &str) -> Result<Vec<AstNode>, pest::error::Error<Rule>> {
+    let mut ast: Vec<AstNode> = vec![];
+
+    let pairs = parse_grammar( source)?;
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::statements => {
+                ast.push(AstNode::Print(Box::new(build_ast_from_statements(pair.into_inner().next().unwrap()))));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(ast)
+}
+
+
+fn build_ast_from_statements(pair: pest::iterators::Pair<Rule>) -> AstNode {
+    match pair.as_rule() {
+        Rule::statement => parse_ast_statement(pair.into_inner()),
+        _ => panic!("{:?}", pair),
+    }
+}
+
+fn parse_ast_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
+    let mut verb = vec![];
+    let mut scope = Option::None;
+
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::verb => verb.push(parse_ast_verb(pair.into_inner().next().unwrap())),
+            Rule::scope => {scope = Some(parse_ast_scope(pair.into_inner().next().unwrap()))},
+            _=>{}
+        }
+    }
+
+    AstNode::Statement {
+        verb,
+        scope:Box::new(scope)
+    }
+
+}
+
+fn parse_ast_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
+    let mut named_parameter:Vec<AstNode> = vec![];
+    let mut ident = String::new();
+
+    match pair.as_rule() {
+        Rule::ident => {
+            ident = pair.as_str().to_string();
+        },
+        Rule::named_parameter => {named_parameter = parse_ast_named_parameter(pair.into_inner())},
+        _ => { },
+    }
+
+    AstNode::Verb {
+        ident,
+        named_parameter,
+    }
+}
+
+fn parse_ast_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
+    let mut named_parameters:Vec<AstNode> = vec![];
+    for pair in pairs {
+        let mut ident = String::new();
+        let mut regex = Regex::new(".").unwrap();
+        match pair.as_rule() {
+            Rule::ident => {
+                let mut inner_pair = pair.into_inner();
+                ident = inner_pair.next().unwrap().as_str().to_string();
+            },
+            Rule::regex => {
+                let mut inner_pair = pair.into_inner();
+                regex = Regex::new(inner_pair.next().unwrap().as_str()).unwrap();
+            },
+            _ => {},
+        }
+        named_parameters.push(AstNode::NamedParameter {
+            ident,
+            regex
+        });
+    }
+    named_parameters
+
+}
+
+fn parse_ast_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
+    match pair.as_rule() {
+        Rule::statements => build_ast_from_statements(pair.into_inner().next().unwrap()),
+        _ => panic!("{:?}", pair),
+    }
+}
+
+
 
 impl parser {
     pub fn new(project_path: String, lsp_server: Box<dyn searcher::LSPServer>) -> parser {
@@ -231,3 +350,4 @@ impl parser {
 
 #[cfg(test)]
 mod parser_test;
+mod ast_test;
