@@ -5,6 +5,7 @@ use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 
 pub trait LSPServer {
@@ -18,7 +19,7 @@ pub trait LSPServer {
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<parser::FilterName, String>>,
-    ) -> HashSet<FunctionEdge>;
+    ) -> HashSet<FunctionNode>;
     fn search_child_single_document_filter(
         &mut self,
         func_filter: Regex,
@@ -31,7 +32,7 @@ pub trait LSPServer {
         parent_filter: HashMap<String, String>,
         document_name: &str,
     ) -> HashSet<(String, String)>;
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
+   fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
     fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str)
         -> HashSet<String>;
 }
@@ -60,36 +61,87 @@ pub struct ClangdServer {
     pub project_path: String,
 }
 
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
-pub struct FunctionEdge {
-    pub(crate) function_name: String,
+pub struct FunctionNode {
+    pub function_name: String,
     pub document: String,
+    pub match_strategy: Box<dyn MatchFunctionEdge>
+}
+
+impl Hash for FunctionNode {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.function_name.hash(state);
+        self.document.hash(state);
+    }
+}
+
+impl PartialEq for FunctionNode {
+    fn eq(&self, other: &Self) -> bool {
+        (self.document == other.document && self.function_name == other.function_name)
+    }
+}
+
+impl Eq for FunctionNode {}
+
+impl Clone for FunctionNode {
+    fn clone(&self) -> Self {
+        match self.match_strategy.get_implementation().as_str() {
+            "ForcedEdge" => {
+                let strategy = ForcedEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                FunctionNode{
+                    function_name: self.function_name.clone(),
+                    document: self.function_name.clone(),
+                    match_strategy: Box::new(strategy),
+                }
+
+            }
+            "ParentChildEdge" => {
+                let strategy = ParentChildEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                FunctionNode{
+                    function_name: self.function_name.clone(),
+                    document: self.function_name.clone(),
+                    match_strategy: Box::new(strategy),
+                }
+            }
+            _ => {unimplemented!()}
+        }
+    }
 }
 
 pub trait MatchFunctionEdge {
-    fn get_func_name(&mut self) -> String;
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool;
+    fn get_implementation(&self) -> String;
 }
 
-pub trait ForcedEdge: MatchFunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct ForcedEdge{
+    pub function_name: String,
+    pub document: String,
 }
 
-pub trait DefaultEdge: MatchFunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge, lsp_server: &dyn LSPServer) -> bool;
+pub struct ParentChildEdge {
+    pub function_name: String,
+    pub document: String,
 }
 
-impl MatchFunctionEdge for FunctionEdge {
-    fn get_func_name(&mut self) -> String {
-        self.function_name.clone()
-    }
-}
-
-impl ForcedEdge for FunctionEdge {
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool {
-        if false {unimplemented!("{:?}", match_target)}
-
+impl MatchFunctionEdge for ForcedEdge {
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+        if false {match_target; lsp_server; unimplemented!()}
         true
     }
+    fn get_implementation(&self) -> String {
+        "ForcedEdge".to_string()
+    }
+
+}
+
+impl MatchFunctionEdge for ParentChildEdge {
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+        lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
+    }
+    fn get_implementation(&self) -> String{
+        "ParentChildEdge".to_string()
+    }
+
 }
 
 impl ClangdServer {
@@ -244,8 +296,8 @@ impl LSPServer for ClangdServer {
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<parser::FilterName, String>>,
-    ) -> HashSet<FunctionEdge> {
-        let mut func_names: HashSet<FunctionEdge> = HashSet::new();
+    ) -> HashSet<FunctionNode> {
+        let mut func_names: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::File) {
@@ -277,10 +329,11 @@ impl LSPServer for ClangdServer {
                         let names =
                             self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            func_names.insert(FunctionEdge {
+                            let prent_child_edge = ParentChildEdge{
                                 function_name: name.clone(),
-                                document: file_path.clone(),
-                            });
+                                document: file_path.clone()
+                            };
+                            func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(prent_child_edge)});
                         }
                     }
                 }

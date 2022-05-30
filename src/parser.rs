@@ -12,7 +12,7 @@ use std::io::prelude::*;
 
 use regex::Regex;
 
-use crate::searcher::{ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
+use crate::searcher::{ParentChildEdge, ForcedEdge, FunctionNode, LSPServer, MatchFunctionEdge};
 use crate::lang_server::Error;
 
 #[derive(Parser)]
@@ -169,7 +169,7 @@ impl PestParser {
         p
     }
 
-    pub fn parse(&mut self, input: &str) -> HashSet<FunctionEdge>{
+    pub fn parse(&mut self, input: &str) -> HashSet<FunctionNode>{
         let pair = parse_grammar(input);
         if pair.is_ok() {
             self.parse_statements(pair.unwrap().next().unwrap())
@@ -179,8 +179,8 @@ impl PestParser {
         }
     }
 
-    fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionEdge> {
-        let mut function_names: HashSet<FunctionEdge> = HashSet::new();
+    fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionNode> {
+        let mut function_names: HashSet<FunctionNode> = HashSet::new();
         //let mut overwrite_name : String = "".to_string();
 
         for inner_pair in pair.to_owned().into_inner() {
@@ -231,9 +231,9 @@ impl PestParser {
     }
 */
 
-    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionEdge>) -> HashSet<FunctionEdge> {
+    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
         let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
-        let mut child_names: HashSet<FunctionEdge> = HashSet::new();
+        let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut do_search = false;
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -259,18 +259,18 @@ impl PestParser {
             for mut parent in parent_names {
                 if child_names.to_owned().len() > 0 {
                     for mut child in child_names.to_owned(){
-                        if parent.clone().do_match(child.to_owned()) {
+                        if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
-                            self.graph.insert_edge(None, parent.get_func_name(), child.get_func_name());
+                            self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
                         }
                     }
                 } else {
                     if do_search {
-                        let children = self.lang_server.search_child(parent.get_func_name());
+                        let children = self.lang_server.search_child(parent.function_name.clone());
                         if children.len() > 0 {
                             parents.insert(parent.clone());
                             for child in children{
-                                self.graph.insert_edge(None, parent.clone().get_func_name(), child);
+                                self.graph.insert_edge(None, parent.clone().function_name.clone(), child);
                             }
                         }
                     } else {
@@ -280,9 +280,13 @@ impl PestParser {
             }
         } else {
             for mut child in child_names {
-                for parent in self.lang_server.search_parent(child.get_func_name()) {
-                    parents.insert(FunctionEdge{ function_name: parent.clone(), document: "".to_string() });
-                    self.graph.insert_edge(None, parent.clone(), child.get_func_name());
+                for parent in self.lang_server.search_parent(child.function_name.clone()) {
+                    let prent_cild_edge = ParentChildEdge{
+                        function_name: parent.clone(),
+                        document: "".to_string()
+                    };
+                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(prent_cild_edge) });
+                    self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
                 }
             }
         }
