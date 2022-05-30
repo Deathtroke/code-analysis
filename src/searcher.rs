@@ -19,7 +19,7 @@ pub trait LSPServer {
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<parser::FilterName, String>>,
-    ) -> HashSet<FunctionEdge>;
+    ) -> HashSet<FunctionNode>;
     fn search_child_single_document_filter(
         &mut self,
         func_filter: Regex,
@@ -32,13 +32,7 @@ pub trait LSPServer {
         parent_filter: HashMap<String, String>,
         document_name: &str,
     ) -> HashSet<(String, String)>;
-    fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
-    fn search_child(&mut self, search_target: String)  -> HashSet<String>;
-    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
-    fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionNode>;
-    fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
-    fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
+   fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
     fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str)
         -> HashSet<String>;
 }
@@ -131,7 +125,7 @@ pub struct ParentChildEdge {
 
 impl MatchFunctionEdge for ForcedEdge {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
-        if false {unimplemented!("{:?}", match_target)}
+        if false {match_target; lsp_server; unimplemented!()}
         true
     }
     fn get_implementation(&self) -> String {
@@ -335,7 +329,6 @@ impl LSPServer for ClangdServer {
                         let names =
                             self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            let lsp_server = ClangdServer::new(self.project_path.clone());
                             let prent_child_edge = ParentChildEdge{
                                 function_name: name.clone(),
                                 document: file_path.clone()
@@ -487,7 +480,7 @@ impl LSPServer for ClangdServer {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
                             //println!("{}", func_name);
-                            if child_name == func_name {
+                            if parent_name == func_name {
                                 let prep_call_hierarchy = self
                                     .lang_server
                                     .call_hierarchy_item(&document, symbol.range.start);

@@ -231,9 +231,9 @@ impl PestParser {
     }
 */
 
-    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionEdge>) -> HashSet<FunctionEdge> {
+    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
         let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
-        let mut child_names: HashSet<FunctionEdge> = HashSet::new();
+        let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut do_search = false;
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -259,18 +259,18 @@ impl PestParser {
             for mut parent in parent_names {
                 if child_names.to_owned().len() > 0 {
                     for mut child in child_names.to_owned(){
-                        if parent.clone().do_match(child.to_owned()) {
+                        if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
-                            self.graph.insert_edge(None, parent.get_func_name(), child.get_func_name());
+                            self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
                         }
                     }
                 } else {
                     if do_search {
-                        let children = self.lang_server.search_child(parent.get_func_name());
+                        let children = self.lang_server.search_child(parent.function_name.clone());
                         if children.len() > 0 {
                             parents.insert(parent.clone());
                             for child in children{
-                                self.graph.insert_edge(None, parent.clone().get_func_name(), child);
+                                self.graph.insert_edge(None, parent.clone().function_name.clone(), child);
                             }
                         }
                     } else {
