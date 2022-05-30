@@ -1,8 +1,6 @@
 use pest::error::InputLocation;
 // Note this useful idiom: importing names from outer (for mod tests) scope.
 use super::*;
-use pest::iterators::Pair;
-use regex::Regex;
 
 #[test]
 fn test_ast_parser() {

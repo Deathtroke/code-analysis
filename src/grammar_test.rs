@@ -25,7 +25,10 @@ fn test_grammar_simple1() {
                                                         match statement2.as_rule() {
                                                             parser::Rule::verb => {
                                                                 i += 1;
-                                                                assert_eq!(statement2.as_str(), "@foo");
+                                                                assert_eq!(
+                                                                    statement2.as_str(),
+                                                                    "@foo"
+                                                                );
                                                             }
                                                             _ => {}
                                                         }
@@ -106,11 +109,17 @@ fn test_grammar1() {
                                                         match statement2.as_rule() {
                                                             parser::Rule::verb => {
                                                                 i += 1;
-                                                                assert_eq!(statement2.as_str(), "@bar");
+                                                                assert_eq!(
+                                                                    statement2.as_str(),
+                                                                    "@bar"
+                                                                );
                                                             }
                                                             parser::Rule::scope => {
                                                                 i += 1;
-                                                                assert_eq!(statement2.as_str(), "{}");
+                                                                assert_eq!(
+                                                                    statement2.as_str(),
+                                                                    "{}"
+                                                                );
                                                             }
                                                             _ => {}
                                                         }
@@ -164,7 +173,10 @@ fn test_grammar2() {
                                                         match statement2.as_rule() {
                                                             parser::Rule::verb => {
                                                                 i += 1;
-                                                                assert_eq!(statement2.as_str(), "@tar");
+                                                                assert_eq!(
+                                                                    statement2.as_str(),
+                                                                    "@tar"
+                                                                );
                                                             }
                                                             _ => {}
                                                         }
@@ -192,7 +204,7 @@ fn test_grammar2() {
 #[test]
 fn test_wrong_space() {
     let input = r#"{@ tar}"#;
-    let result= parser::parse_grammar(input);
+    let result = parser::parse_grammar(input);
     assert!(result.is_err());
     assert_eq!(result.err().unwrap().location, InputLocation::Pos(2));
 }
@@ -216,9 +228,15 @@ fn test_grammar_complex1() {
                         parser::Rule::verb => {
                             i += 1;
                             match i {
-                                1 => {assert_eq!(statement.as_str(), "@foo");}
-                                2 => {assert_eq!(statement.as_str(), "@bar");}
-                                _ => {assert_eq!(statement.as_str(), "@foo");}
+                                1 => {
+                                    assert_eq!(statement.as_str(), "@foo");
+                                }
+                                2 => {
+                                    assert_eq!(statement.as_str(), "@bar");
+                                }
+                                _ => {
+                                    assert_eq!(statement.as_str(), "@foo");
+                                }
                             }
                         }
                         parser::Rule::scope => {
@@ -236,18 +254,40 @@ fn test_grammar_complex1() {
                                                                 verb_nr += 1;
                                                                 //println!("{} -> <{}>", verb_nr, statement2.as_str());
                                                                 match verb_nr {
-                                                                    1 => {assert_eq!(statement2.as_str(), "@foo");}
-                                                                    2 => {assert_eq!(statement2.as_str(), "@bar");}
+                                                                    1 => {
+                                                                        assert_eq!(
+                                                                            statement2.as_str(),
+                                                                            "@foo"
+                                                                        );
+                                                                    }
+                                                                    2 => {
+                                                                        assert_eq!(
+                                                                            statement2.as_str(),
+                                                                            "@bar"
+                                                                        );
+                                                                    }
                                                                     //next statement
-                                                                    3 => {assert_eq!(statement2.as_str(), "@foo");}
-                                                                    4 => {assert_eq!(statement2.as_str(), "@tar");}
+                                                                    3 => {
+                                                                        assert_eq!(
+                                                                            statement2.as_str(),
+                                                                            "@foo"
+                                                                        );
+                                                                    }
+                                                                    4 => {
+                                                                        assert_eq!(
+                                                                            statement2.as_str(),
+                                                                            "@tar"
+                                                                        );
+                                                                    }
                                                                     _ => {}
                                                                 }
                                                             }
                                                             parser::Rule::scope => {
                                                                 i += 1;
-                                                                let re = Regex::new(r"\{([ \n])*}").unwrap();
-                                                                assert!(re.is_match(statement2.as_str()));
+                                                                let re = Regex::new(r"\{([ \n])*}")
+                                                                    .unwrap();
+                                                                assert!(re
+                                                                    .is_match(statement2.as_str()));
                                                             }
                                                             _ => {}
                                                         }

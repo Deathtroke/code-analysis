@@ -1,26 +1,43 @@
-use std::collections::{HashMap, HashSet};
+use crate::lang_server::LanguageServer;
+use crate::{lang_server, parser};
 use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
-use crate::{lang_server, parser};
-use crate::lang_server::LanguageServer;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::prelude::*;
 
-
 pub trait LSPServer {
-    fn search_parent(&mut self, search_target: String)  -> HashSet<String>;
-    fn search_child(&mut self, search_target: String)  -> HashSet<String>;
-    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>)  -> HashSet<(String, String)>;
-    fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>;
-    fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
-    fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)>;
+    fn search_parent(&mut self, search_target: String) -> HashSet<String>;
+    fn search_child(&mut self, search_target: String) -> HashSet<String>;
+    fn search_connection_filter(
+        &mut self,
+        parent_filter: HashMap<String, String>,
+        child_filter: HashMap<String, String>,
+    ) -> HashSet<(String, String)>;
+    fn find_func_name(
+        &mut self,
+        filter: Vec<HashMap<parser::FilterName, String>>,
+    ) -> HashSet<FunctionEdge>;
+    fn search_child_single_document_filter(
+        &mut self,
+        func_filter: Regex,
+        child_filter: HashMap<String, String>,
+        document_name: &str,
+    ) -> HashSet<(String, String)>;
+    fn search_parent_single_document_filter(
+        &mut self,
+        func_filter: Regex,
+        parent_filter: HashMap<String, String>,
+        document_name: &str,
+    ) -> HashSet<(String, String)>;
     fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
-    fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String>;
-    }
+    fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str)
+        -> HashSet<String>;
+}
 
-fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
-    let mut files :Vec<String> = Vec::new();
+fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String> {
+    let mut files: Vec<String> = Vec::new();
     let paths = fs::read_dir(dir.clone()).unwrap();
 
     for path in paths {
@@ -29,8 +46,8 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
             let mut subfolder = get_all_files_in_project(path_str, project_path.clone());
             files.append(&mut subfolder);
         } else {
-            if path_str.ends_with(".cpp") || path_str.ends_with(".c"){
-                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"),""));
+            if path_str.ends_with(".cpp") || path_str.ends_with(".c") {
+                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"), ""));
             }
         }
     }
@@ -38,12 +55,10 @@ fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String>{
 }
 
 pub struct ClangdServer {
-    pub lang_server : Box<dyn LanguageServer>,
+    pub lang_server: Box<dyn LanguageServer>,
     pub files_in_project: Vec<String>,
     pub project_path: String,
-
 }
-
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct FunctionEdge {
@@ -55,11 +70,11 @@ pub trait MatchFunctionEdge {
     fn get_func_name(&mut self) -> String;
 }
 
-pub trait ForcedEdge : MatchFunctionEdge{
+pub trait ForcedEdge: MatchFunctionEdge {
     fn do_match(&mut self, match_target: FunctionEdge) -> bool;
 }
 
-pub trait DefaultEdge: MatchFunctionEdge{
+pub trait DefaultEdge: MatchFunctionEdge {
     fn do_match(&mut self, match_target: FunctionEdge, lsp_server: &dyn LSPServer) -> bool;
 }
 
@@ -71,19 +86,15 @@ impl MatchFunctionEdge for FunctionEdge {
 
 impl ForcedEdge for FunctionEdge {
     fn do_match(&mut self, match_target: FunctionEdge) -> bool {
+        if false {unimplemented!("{:?}", match_target)}
+
         true
     }
 }
 
-// impl DefaultEdge for FunctionEdge {
-//     fn do_match(&mut self, match_target: FunctionEdge, mut lsp_server: &dyn LSPServer) -> bool {
-//         lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
-//     }
-// }
-
 impl ClangdServer {
     pub fn new(project_path: String) -> Box<dyn LSPServer> {
-        let mut lsp_server = Self{
+        let mut lsp_server = Self {
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server("/usr/bin/clangd".to_owned())
                 .project(project_path.to_owned())
@@ -94,25 +105,25 @@ impl ClangdServer {
             project_path,
         };
         let res = lsp_server.lang_server.initialize();
-        if res.is_err(){
+        if res.is_err() {
             println!("LSP server didn't initialize: {:?}", res.err())
         }
         Box::new(lsp_server)
     }
 }
 
-
 impl LSPServer for ClangdServer {
-    fn search_parent(&mut self, search_target: String)  -> HashSet<String>{
-        let mut parent_filter:HashMap <String, String> = HashMap::new();
+    fn search_parent(&mut self, search_target: String) -> HashSet<String> {
+        let mut parent_filter: HashMap<String, String> = HashMap::new();
         parent_filter.insert("function".to_string(), ".".to_string());
-        let mut child_filter:HashMap <String, String> = HashMap::new();
-        child_filter.insert("function".to_string(),search_target.clone());
+        let mut child_filter: HashMap<String, String> = HashMap::new();
+        child_filter.insert("function".to_string(), search_target.clone());
 
         //let parents:HashSet<String> = self.search_all_parents(search_target.clone());
-        let connection :HashSet<(String, String)> = self.search_connection_filter(parent_filter, child_filter);
+        let connection: HashSet<(String, String)> =
+            self.search_connection_filter(parent_filter, child_filter);
 
-        let mut parents :HashSet<String> = HashSet::new();
+        let mut parents: HashSet<String> = HashSet::new();
         for parent in connection.clone() {
             //self.graph.insert_edge(None, parent.0.clone(), search_target.to_string());
             parents.insert(parent.0);
@@ -120,15 +131,16 @@ impl LSPServer for ClangdServer {
         parents
     }
 
-    fn search_child(&mut self, search_target: String)  -> HashSet<String>{
-        let mut parent_filter:HashMap <String, String> = HashMap::new();
+    fn search_child(&mut self, search_target: String) -> HashSet<String> {
+        let mut parent_filter: HashMap<String, String> = HashMap::new();
         parent_filter.insert("function".to_string(), search_target.clone());
-        let mut child_filter:HashMap <String, String> = HashMap::new();
-        child_filter.insert("function".to_string(),".".to_string());
+        let mut child_filter: HashMap<String, String> = HashMap::new();
+        child_filter.insert("function".to_string(), ".".to_string());
 
-        let connection :HashSet<(String, String)> = self.search_connection_filter(parent_filter, child_filter);
+        let connection: HashSet<(String, String)> =
+            self.search_connection_filter(parent_filter, child_filter);
 
-        let mut children :HashSet<String> = HashSet::new();
+        let mut children: HashSet<String> = HashSet::new();
         for child in connection.clone() {
             //self.graph.insert_edge(None, search_target.to_string(), child.1.clone());
             children.insert(child.1);
@@ -136,35 +148,38 @@ impl LSPServer for ClangdServer {
         children
     }
 
-    fn search_connection_filter(&mut self, parent_filter: HashMap<String, String>, child_filter: HashMap<String, String>) -> HashSet<(String, String)> {
-        let mut connections:HashSet<(String, String)> = HashSet::new();
+    fn search_connection_filter(
+        &mut self,
+        parent_filter: HashMap<String, String>,
+        child_filter: HashMap<String, String>,
+    ) -> HashSet<(String, String)> {
+        let mut connections: HashSet<(String, String)> = HashSet::new();
 
-        let mut file_filter_p= Regex::new(".").unwrap(); //any
+        let mut file_filter_p = Regex::new(".").unwrap(); //any
         if parent_filter.contains_key("file") {
             file_filter_p = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
         }
-        let mut func_filter_p= Regex::new(".").unwrap(); //any
+        let mut func_filter_p = Regex::new(".").unwrap(); //any
         if parent_filter.contains_key("function") {
             func_filter_p = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
         }
 
-        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        let mut file_filter_c = Regex::new(".").unwrap(); //any
         if child_filter.contains_key("file") {
             file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
         }
-        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        let mut func_filter_c = Regex::new(".").unwrap(); //any
         if child_filter.contains_key("function") {
             func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
         }
 
         if (file_filter_p.as_str() == ".") && (func_filter_p.as_str() == ".") {
-
-            for file_path in self.files_in_project.clone(){
+            for file_path in self.files_in_project.clone() {
                 if file_filter_c.is_match(file_path.as_str()) {
                     let path = self.project_path.clone() + "/" + file_path.as_str();
                     let mut file = match File::open(&path) {
                         Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file
+                        Ok(file) => file,
                     };
                     let mut s = String::new();
                     match file.read_to_string(&mut s) {
@@ -175,10 +190,13 @@ impl LSPServer for ClangdServer {
                     let mut new_children = HashSet::new();
                     let need_lsp = func_filter_c.is_match(s.as_str());
                     //println!("{}", need_lsp);
-                    if need_lsp
-                    {
+                    if need_lsp {
                         //println!("{}, {}", file_path, search_target.clone());
-                        new_children = self.search_parent_single_document_filter(func_filter_c.clone(), parent_filter.clone(), file_path.as_str());
+                        new_children = self.search_parent_single_document_filter(
+                            func_filter_c.clone(),
+                            parent_filter.clone(),
+                            file_path.as_str(),
+                        );
                         //println!("{:?}", new_children);
                     }
                     for child in new_children {
@@ -188,13 +206,12 @@ impl LSPServer for ClangdServer {
                 }
             }
         } else {
-
-            for file_path in self.files_in_project.clone(){
+            for file_path in self.files_in_project.clone() {
                 if file_filter_p.is_match(file_path.as_str()) {
                     let path = self.project_path.clone() + "/" + file_path.as_str();
                     let mut file = match File::open(&path) {
                         Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file
+                        Ok(file) => file,
                     };
                     let mut s = String::new();
                     match file.read_to_string(&mut s) {
@@ -205,10 +222,13 @@ impl LSPServer for ClangdServer {
                     let mut new_children = HashSet::new();
                     let need_lsp = func_filter_p.is_match(s.as_str());
                     //println!("{}", need_lsp);
-                    if need_lsp
-                    {
+                    if need_lsp {
                         //println!("{}, {}", file_path, search_target.clone());
-                        new_children = self.search_child_single_document_filter(func_filter_p.clone(), child_filter.clone(), file_path.as_str());
+                        new_children = self.search_child_single_document_filter(
+                            func_filter_p.clone(),
+                            child_filter.clone(),
+                            file_path.as_str(),
+                        );
                         //println!("{:?}", new_children);
                     }
                     for child in new_children {
@@ -221,26 +241,29 @@ impl LSPServer for ClangdServer {
         connections
     }
 
-    fn find_func_name(&mut self, filter: Vec<HashMap<parser::FilterName, String>>) -> HashSet<FunctionEdge>{
-        let mut func_names :HashSet<FunctionEdge> = HashSet::new();
-        for f in filter{
+    fn find_func_name(
+        &mut self,
+        filter: Vec<HashMap<parser::FilterName, String>>,
+    ) -> HashSet<FunctionEdge> {
+        let mut func_names: HashSet<FunctionEdge> = HashSet::new();
+        for f in filter {
             let mut file_filter = Regex::new(".").unwrap();
-            if f.contains_key(&parser::FilterName::File){
+            if f.contains_key(&parser::FilterName::File) {
                 let regex = f.get(&parser::FilterName::File).unwrap();
                 file_filter = Regex::new(regex.clone().as_str()).unwrap();
             }
 
             let mut function_filter = Regex::new(".").unwrap();
-            if f.contains_key(&parser::FilterName::Function){
+            if f.contains_key(&parser::FilterName::Function) {
                 let regex = f.get(&parser::FilterName::Function).unwrap();
                 function_filter = Regex::new(regex.as_str()).unwrap();
             }
-            for file_path in self.files_in_project.clone(){
+            for file_path in self.files_in_project.clone() {
                 if file_filter.is_match(file_path.as_str()) {
                     let path = self.project_path.clone() + "/" + file_path.as_str();
                     let mut file = match File::open(&path) {
                         Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file
+                        Ok(file) => file,
                     };
                     let mut s = String::new();
                     match file.read_to_string(&mut s) {
@@ -250,12 +273,14 @@ impl LSPServer for ClangdServer {
 
                     let need_lsp = function_filter.is_match(s.as_str());
 
-                    if need_lsp
-                    {
-
-                        let names = self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
+                    if need_lsp {
+                        let names =
+                            self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            func_names.insert( FunctionEdge{function_name: name.clone(), document: file_path.clone()});
+                            func_names.insert(FunctionEdge {
+                                function_name: name.clone(),
+                                document: file_path.clone(),
+                            });
                         }
                     }
                 }
@@ -264,15 +289,20 @@ impl LSPServer for ClangdServer {
 
         func_names
     }
-    fn search_child_single_document_filter(&mut self, func_filter: Regex, child_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+    fn search_child_single_document_filter(
+        &mut self,
+        func_filter: Regex,
+        child_filter: HashMap<String, String>,
+        document_name: &str,
+    ) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
 
-        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        let mut file_filter_c = Regex::new(".").unwrap(); //any
         if child_filter.contains_key("file") {
             file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
         }
-        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        let mut func_filter_c = Regex::new(".").unwrap(); //any
         if child_filter.contains_key("function") {
             func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
         }
@@ -282,21 +312,29 @@ impl LSPServer for ClangdServer {
         match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
                 println!("unsupported symbols found");
-            },
+            }
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
                         //println!("func {}", func_name);
                         if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                            let prep_call_hierarchy = self
+                                .lang_server
+                                .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
                             if call_hierarchy_array.len() > 0 {
-                                let outgoing_calls = self.lang_server.call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
+                                let outgoing_calls = self
+                                    .lang_server
+                                    .call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
                                 for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(outgoing_call.to.name.as_str()) &&
-                                        file_filter_c.is_match(outgoing_call.to.uri.as_str()) {
-                                        result.insert((func_name.clone(), outgoing_call.to.name.to_string()));
+                                    if func_filter_c.is_match(outgoing_call.to.name.as_str())
+                                        && file_filter_c.is_match(outgoing_call.to.uri.as_str())
+                                    {
+                                        result.insert((
+                                            func_name.clone(),
+                                            outgoing_call.to.name.to_string(),
+                                        ));
                                     }
                                 }
                                 break;
@@ -304,7 +342,7 @@ impl LSPServer for ClangdServer {
                         }
                     }
                 }
-            },
+            }
             None => {
                 println!("no symbols found");
             }
@@ -313,15 +351,20 @@ impl LSPServer for ClangdServer {
         result
     }
 
-    fn search_parent_single_document_filter(&mut self, func_filter: Regex, parent_filter: HashMap<String, String>, document_name: &str) -> HashSet<(String, String)> {
+    fn search_parent_single_document_filter(
+        &mut self,
+        func_filter: Regex,
+        parent_filter: HashMap<String, String>,
+        document_name: &str,
+    ) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
         let document = self.lang_server.document_open(document_name).unwrap();
 
-        let mut file_filter_c= Regex::new(".").unwrap(); //any
+        let mut file_filter_c = Regex::new(".").unwrap(); //any
         if parent_filter.contains_key("file") {
             file_filter_c = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
         }
-        let mut func_filter_c= Regex::new(".").unwrap(); //any
+        let mut func_filter_c = Regex::new(".").unwrap(); //any
         if parent_filter.contains_key("function") {
             func_filter_c = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
         }
@@ -331,28 +374,36 @@ impl LSPServer for ClangdServer {
         match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
                 println!("unsupported symbols found");
-            },
+            }
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
                         //println!("{}", func_name);
                         if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                            let prep_call_hierarchy = self
+                                .lang_server
+                                .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
                             if call_hierarchy_array.len() > 0 {
-                                let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
+                                let incoming_calls = self
+                                    .lang_server
+                                    .call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
                                 for incoming_call in incoming_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(incoming_call.from.name.as_str()) &&
-                                        file_filter_c.is_match(incoming_call.from.uri.as_str()) {
-                                        result.insert((incoming_call.from.name.to_string(), func_name.clone()));
+                                    if func_filter_c.is_match(incoming_call.from.name.as_str())
+                                        && file_filter_c.is_match(incoming_call.from.uri.as_str())
+                                    {
+                                        result.insert((
+                                            incoming_call.from.name.to_string(),
+                                            func_name.clone(),
+                                        ));
                                     }
                                 }
                             }
                         }
                     }
                 }
-            },
+            }
             None => {
                 println!("no symbols found");
             }
@@ -361,7 +412,7 @@ impl LSPServer for ClangdServer {
         result
     }
 
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool{
+    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
         let document_res = self.lang_server.document_open(document_name);
         if document_res.is_ok() {
             let document = document_res.unwrap();
@@ -370,27 +421,32 @@ impl LSPServer for ClangdServer {
             match doc_symbol {
                 Some(DocumentSymbolResponse::Flat(_)) => {
                     println!("unsupported symbols found");
-                },
+                }
                 Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                     for symbol in doc_symbols {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
                             //println!("{}", func_name);
                             if parent_name == func_name {
-                                let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
+                                let prep_call_hierarchy = self
+                                    .lang_server
+                                    .call_hierarchy_item(&document, symbol.range.start);
                                 let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
                                 if call_hierarchy_array.len() > 0 {
-                                    let incoming_calls = self.lang_server.call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
-                                    for incoming_call in incoming_calls.unwrap().unwrap() {
-                                        if incoming_call.from.name.as_str() == parent_name {
-                                            return true
+                                    let outgoing_calls =
+                                        self.lang_server.call_hierarchy_item_outgoing(
+                                            call_hierarchy_array[0].clone(),
+                                        );
+                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                        if outgoing_call.to.name.as_str() == child_name {
+                                            return true;
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                },
+                }
                 None => {
                     println!("no symbols found");
                 }
@@ -399,7 +455,11 @@ impl LSPServer for ClangdServer {
         false
     }
 
-    fn find_functions_in_doc(&mut self, func_filter: Regex, document_name: &str) -> HashSet<String> {
+    fn find_functions_in_doc(
+        &mut self,
+        func_filter: Regex,
+        document_name: &str,
+    ) -> HashSet<String> {
         let mut result = HashSet::new();
         let document_res = self.lang_server.document_open(document_name);
         if document_res.is_ok() {
@@ -410,7 +470,7 @@ impl LSPServer for ClangdServer {
             match doc_symbol {
                 Some(DocumentSymbolResponse::Flat(_)) => {
                     println!("unsupported symbols found");
-                },
+                }
                 Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                     for symbol in doc_symbols {
                         if symbol.kind == SymbolKind::FUNCTION {
@@ -421,7 +481,7 @@ impl LSPServer for ClangdServer {
                             }
                         }
                     }
-                },
+                }
                 None => {
                     println!("no symbols found");
                 }

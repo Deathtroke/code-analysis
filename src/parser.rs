@@ -14,13 +14,12 @@ use regex::Regex;
 
 use crate::searcher::{ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
 use crate::lang_server::Error;
-use petgraph::matrix_graph::Nullable;
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
 struct MyParser;
 
-pub struct parser {
+pub struct PestParser {
     pub graph : graph::Graph,
     lang_server : Box<dyn searcher::LSPServer>,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
@@ -157,9 +156,9 @@ fn parse_ast_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
 
 
 
-impl parser {
-    pub fn new(project_path: String, lsp_server: Box<dyn searcher::LSPServer>) -> parser {
-        let p = parser{
+impl PestParser {
+    pub fn new(lsp_server: Box<dyn searcher::LSPServer>) -> PestParser {
+        let p = PestParser {
             graph: graph::Graph {
                 edges: HashSet::new(),
             },
@@ -292,11 +291,10 @@ impl parser {
 
     fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
         let mut filter: HashMap<FilterName, String> = HashMap::new();
-        let mut ident = "";
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::ident => {
-                    ident = inner_pair.as_str();
+                    let ident = inner_pair.as_str();
                     filter.insert(FilterName::Function, ident.to_string());
                 }
                 Rule::named_parameter => {
