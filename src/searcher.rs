@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
@@ -5,6 +6,7 @@ use crate::{lang_server, parser};
 use crate::lang_server::LanguageServer;
 use std::fs;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 
 
@@ -44,42 +46,65 @@ pub struct ClangdServer {
 
 }
 
-
-#[derive(Eq, Hash, PartialEq, Debug, Clone)]
 pub struct FunctionEdge {
-    pub(crate) function_name: String,
+    pub function_name: String,
     pub document: String,
+    pub match_strategy: Box<dyn MatchFunctionEdge>
 }
 
-pub trait MatchFunctionEdge {
-    fn get_func_name(&mut self) -> String;
-}
-
-pub trait ForcedEdge : MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
-}
-
-pub trait DefaultEdge: MatchFunctionEdge{
-    fn do_match(&mut self, match_target: FunctionEdge, lsp_server: &dyn LSPServer) -> bool;
-}
-
-impl MatchFunctionEdge for FunctionEdge {
-    fn get_func_name(&mut self) -> String {
-        self.function_name.clone()
+impl Hash for FunctionEdge {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.function_name.hash(state);
+        self.document.hash(state);
     }
 }
 
-impl ForcedEdge for FunctionEdge {
+impl PartialEq for FunctionEdge {
+    fn eq(&self, other: &Self) -> bool {
+        (self.document == other.document && self.function_name == other.function_name)
+    }
+}
+
+impl Eq for FunctionEdge {}
+
+impl Clone for FunctionEdge {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+/*
+impl<S> FunctionEdge<S>
+ where
+    S: MatchFunctionEdge,
+ {
+     pub fn do_match(&mut self, match_target: FunctionEdge<S>) -> bool{
+         self.match_strategy.do_match(match_target)
+     }
+ }
+*/
+pub trait MatchFunctionEdge {
+    fn do_match(&mut self, match_target: FunctionEdge) -> bool;
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct ForcedEdge {
+}
+
+pub struct DefaultEdge<'a> {
+    pub lsp_server: &'a Box<dyn LSPServer>,
+}
+
+impl MatchFunctionEdge for ForcedEdge {
     fn do_match(&mut self, match_target: FunctionEdge) -> bool {
         true
     }
 }
 
-// impl DefaultEdge for FunctionEdge {
-//     fn do_match(&mut self, match_target: FunctionEdge, mut lsp_server: &dyn LSPServer) -> bool {
-//         lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
-//     }
-// }
+impl MatchFunctionEdge for DefaultEdge<'_> {
+    fn do_match(&mut self, match_target: FunctionEdge) -> bool {
+        true//self.lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
+    }
+}
 
 impl ClangdServer {
     pub fn new(project_path: String) -> Box<dyn LSPServer> {
@@ -255,7 +280,8 @@ impl LSPServer for ClangdServer {
 
                         let names = self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            func_names.insert( FunctionEdge{function_name: name.clone(), document: file_path.clone()});
+                            let lsp_server = ClangdServer::new(self.project_path.clone());
+                            func_names.insert( FunctionEdge{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(DefaultEdge{lsp_server})});
                         }
                     }
                 }
@@ -376,7 +402,7 @@ impl LSPServer for ClangdServer {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
                             //println!("{}", func_name);
-                            if parent_name == func_name {
+                            if child_name == func_name {
                                 let prep_call_hierarchy = self.lang_server.call_hierarchy_item(&document, symbol.range.start);
                                 let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
                                 if call_hierarchy_array.len() > 0 {

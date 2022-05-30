@@ -12,7 +12,7 @@ use std::io::prelude::*;
 
 use regex::Regex;
 
-use crate::searcher::{ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
+use crate::searcher::{DefaultEdge, ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -136,23 +136,26 @@ impl parser {
                 _ => {}
             }
         }
+        //println!("parents {:?}", parent_filter);
+        //println!("children {:?}", child_names);
+
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
             for mut parent in parent_names {
-                if child_names.to_owned().len() > 0 {
+                if child_names.clone().len() > 0 {
                     for mut child in child_names.to_owned(){
-                        if parent.clone().do_match(child.to_owned()) {
+                        if parent.clone().match_strategy.do_match(child.to_owned()) {
                             parents.insert(parent.clone());
-                            self.graph.insert_edge(None, parent.get_func_name(), child.get_func_name());
+                            self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
                         }
                     }
                 } else {
                     if do_search {
-                        let children = self.lang_server.search_child(parent.get_func_name());
+                        let children = self.lang_server.search_child(parent.function_name.clone());
                         if children.len() > 0 {
                             parents.insert(parent.clone());
                             for child in children{
-                                self.graph.insert_edge(None, parent.clone().get_func_name(), child);
+                                self.graph.insert_edge(None, parent.function_name.clone(), child);
                             }
                         }
                     } else {
@@ -162,9 +165,9 @@ impl parser {
             }
         } else {
             for mut child in child_names {
-                for parent in self.lang_server.search_parent(child.get_func_name()) {
-                    parents.insert(FunctionEdge{ function_name: parent.clone(), document: "".to_string() });
-                    self.graph.insert_edge(None, parent.clone(), child.get_func_name());
+                for parent in self.lang_server.search_parent(child.function_name.clone()) {
+                    parents.insert(FunctionEdge{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(DefaultEdge{lsp_server: &self.lang_server}) });
+                    self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
                 }
             }
         }
