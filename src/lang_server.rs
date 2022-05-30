@@ -1,17 +1,19 @@
-use std::fs;
-use std::str;
-use std::process::{Command, Child, Stdio};
-use std::io::{BufReader, BufRead, Read, Write};
-use std::marker::PhantomData;
 use std::fmt;
+use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::marker::PhantomData;
+use std::process::{Child, Command, Stdio};
+use std::str;
 
 use log;
 use log::{debug, trace};
-use lsp_types::request::{CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare};
+use lsp_types::request::{
+    CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
+};
 
-use serde::{Serialize, Deserialize};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use serde_json;
+use serde_json::json;
 //use test::RunIgnored::No;
 
 use super::*;
@@ -30,16 +32,29 @@ impl std::error::Error for LspError {}
 
 pub(crate) type Error = Box<dyn std::error::Error>;
 
-pub trait LanguageServer : Send {
+pub trait LanguageServer: Send {
     fn initialize(&mut self) -> Result<InitializeResult, Error>;
     fn initialized(&mut self) -> Result<(), Error>;
     fn shutdown(&mut self) -> Result<(), Error>;
     fn exit(&mut self) -> Result<(), Error>;
     fn document_open(&mut self, path: &str) -> Result<TextDocumentItem, Error>;
-    fn document_symbol(&mut self, document: &TextDocumentItem) -> Result<Option<DocumentSymbolResponse>, Error>;
-    fn call_hierarchy_item(&mut self, document: &TextDocumentItem, position: Position) ->  Result<Option<Vec<CallHierarchyItem>>, Error>;
-    fn call_hierarchy_item_outgoing(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyOutgoingCall>>, Error>;
-    fn call_hierarchy_item_incoming(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyIncomingCall>>, Error>;
+    fn document_symbol(
+        &mut self,
+        document: &TextDocumentItem,
+    ) -> Result<Option<DocumentSymbolResponse>, Error>;
+    fn call_hierarchy_item(
+        &mut self,
+        document: &TextDocumentItem,
+        position: Position,
+    ) -> Result<Option<Vec<CallHierarchyItem>>, Error>;
+    fn call_hierarchy_item_outgoing(
+        &mut self,
+        call_hierarchy_item: CallHierarchyItem,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>, Error>;
+    fn call_hierarchy_item_incoming(
+        &mut self,
+        call_hierarchy_item: CallHierarchyItem,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>, Error>;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -101,9 +116,11 @@ pub struct ClangdLanguageServer {
 
 impl ClangdLanguageServer {
     fn new(launcher: LanguageServerLauncher) -> Result<Box<dyn LanguageServer>, Error> {
-        Ok(Box::new(ClangdLanguageServer{
+        Ok(Box::new(ClangdLanguageServer {
             cmd: Command::new(launcher.server_path)
-                .args(ClangdLanguageServer::compose_args(launcher.project_path.clone()))
+                .args(ClangdLanguageServer::compose_args(
+                    launcher.project_path.clone(),
+                ))
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
@@ -118,7 +135,7 @@ impl ClangdLanguageServer {
         vec![
             "--background-index".to_owned(),
             //"--cross-file-rename".to_owned(),
-            format!("--compile-commands-dir=\"{}\"",project_path).to_owned(),
+            format!("--compile-commands-dir=\"{}\"", project_path).to_owned(),
             //project_path,
         ]
     }
@@ -135,7 +152,10 @@ impl ClangdLanguageServer {
     }
 
     fn uri(&mut self, path: &str) -> Url {
-        Url::from_file_path(self.project.clone()).unwrap().join(path).unwrap()
+        Url::from_file_path(self.project.clone())
+            .unwrap()
+            .join(path)
+            .unwrap()
     }
 
     fn full_path(&mut self, path: &str) -> String {
@@ -145,7 +165,7 @@ impl ClangdLanguageServer {
     fn read_message(&mut self) -> Result<String, Error> {
         let mut stdout = self.cmd.stdout.as_mut().expect("Failed to get stdout");
 
-        let mut content_length : usize = 0;
+        let mut content_length: usize = 0;
         let mut reader = BufReader::new(&mut stdout);
         loop {
             let mut buffer = String::new();
@@ -153,7 +173,7 @@ impl ClangdLanguageServer {
                 Ok(0) => {
                     println!("Done");
                     break;
-                },
+                }
                 Ok(_) => {
                     let kv = buffer.split(':').collect::<Vec<_>>();
                     if let ["Content-Length", val] = kv.as_slice() {
@@ -161,11 +181,11 @@ impl ClangdLanguageServer {
                     } else if buffer == "\r\n" {
                         break;
                     }
-                },
+                }
                 Err(_) => {
                     println!("Err");
                     break;
-                },
+                }
             }
         }
 
@@ -174,25 +194,26 @@ impl ClangdLanguageServer {
         Ok(String::from_utf8(content)?)
     }
 
-    fn receive(&mut self) -> Result<Response, Error>
-    {
+    fn receive(&mut self) -> Result<Response, Error> {
         loop {
             let content_str = self.read_message()?;
             match serde_json::from_str(&content_str)? {
                 ServerMessage::Response(resp) => return Ok(resp),
-                ServerMessage::Notification(notification) => debug!("received notification: {}", notification.method),
+                ServerMessage::Notification(notification) => {
+                    debug!("received notification: {}", notification.method)
+                }
             }
         }
     }
 
-    fn request<T: LspRequest>(&mut self, body: Request<T>) -> Result<T::Result, Error>
-    {
+    fn request<T: LspRequest>(&mut self, body: Request<T>) -> Result<T::Result, Error> {
         let raw_json = json!({
             "jsonrpc": body.jsonrpc,
             "id": body.id,
             "params": body.params,
             "method": T::METHOD,
-        }).to_string();
+        })
+        .to_string();
         let stdin = self.cmd.stdin.as_mut().expect("Failed to get stdin");
         let content_length = format!("Content-Length: {}\r\n\r\n", raw_json.len());
         trace!("Writing header: {:#?}", content_length);
@@ -203,7 +224,6 @@ impl ClangdLanguageServer {
         let res: Response = self.receive()?;
 
         self.next_id = self.next_id + 1;
-
 
         Ok(T::Result::deserialize(res.result)?)
     }
@@ -236,7 +256,7 @@ impl LanguageServer for ClangdLanguageServer {
                 text_document: Some(TextDocumentClientCapabilities {
                     document_symbol: Some(DocumentSymbolClientCapabilities {
                         hierarchical_document_symbol_support: Some(true),
-                        symbol_kind: Some(SymbolKindCapability{
+                        symbol_kind: Some(SymbolKindCapability {
                             value_set: Some(vec![
                                 SymbolKind::FILE,
                                 SymbolKind::MODULE,
@@ -264,8 +284,7 @@ impl LanguageServer for ClangdLanguageServer {
                                 SymbolKind::EVENT,
                                 SymbolKind::OPERATOR,
                                 SymbolKind::TYPE_PARAMETER,
-                            ]
-                            )
+                            ]),
                         }),
                         ..Default::default()
                     }),
@@ -305,7 +324,7 @@ impl LanguageServer for ClangdLanguageServer {
             text: contents,
         };
 
-        let notification = Notification::new::<DidOpenTextDocument>(DidOpenTextDocumentParams{
+        let notification = Notification::new::<DidOpenTextDocument>(DidOpenTextDocumentParams {
             text_document: document.clone(),
         });
         self.notify(notification)?;
@@ -313,47 +332,64 @@ impl LanguageServer for ClangdLanguageServer {
         Ok(document)
     }
 
-    fn document_symbol(&mut self, document: &TextDocumentItem) -> Result<Option<DocumentSymbolResponse>, Error> {
+    fn document_symbol(
+        &mut self,
+        document: &TextDocumentItem,
+    ) -> Result<Option<DocumentSymbolResponse>, Error> {
         let params = Request::<DocumentSymbolRequest>::new(DocumentSymbolParams {
-            text_document: TextDocumentIdentifier{
+            text_document: TextDocumentIdentifier {
                 uri: document.uri.clone(),
             },
-            work_done_progress_params: WorkDoneProgressParams{
-                work_done_token: None
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
             },
-            partial_result_params: PartialResultParams{
-                partial_result_token: None
+            partial_result_params: PartialResultParams {
+                partial_result_token: None,
             },
         });
         self.request(params)
     }
 
-    fn call_hierarchy_item(&mut self, document: &TextDocumentItem, position: Position) ->  Result<Option<Vec<CallHierarchyItem>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+    fn call_hierarchy_item(
+        &mut self,
+        document: &TextDocumentItem,
+        position: Position,
+    ) -> Result<Option<Vec<CallHierarchyItem>>, Error> {
+        //-> Result<Option<CallHierarchyItem>, Error>
         let params = Request::<CallHierarchyPrepare>::new(CallHierarchyPrepareParams {
             text_document_position_params: TextDocumentPositionParams {
-                text_document: TextDocumentIdentifier{
+                text_document: TextDocumentIdentifier {
                     uri: document.uri.clone(),
                 },
-                position },
-            work_done_progress_params: Default::default()
+                position,
+            },
+            work_done_progress_params: Default::default(),
         });
         self.request(params)
     }
 
-    fn call_hierarchy_item_outgoing(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyOutgoingCall>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+    fn call_hierarchy_item_outgoing(
+        &mut self,
+        call_hierarchy_item: CallHierarchyItem,
+    ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>, Error> {
+        //-> Result<Option<CallHierarchyItem>, Error>
         let params = Request::<CallHierarchyOutgoingCalls>::new(CallHierarchyOutgoingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: Default::default(),
-            partial_result_params: Default::default()
+            partial_result_params: Default::default(),
         });
         self.request(params)
     }
 
-    fn call_hierarchy_item_incoming(&mut self, call_hierarchy_item: CallHierarchyItem) ->  Result<Option<Vec<CallHierarchyIncomingCall>>, Error>{ //-> Result<Option<CallHierarchyItem>, Error>
+    fn call_hierarchy_item_incoming(
+        &mut self,
+        call_hierarchy_item: CallHierarchyItem,
+    ) -> Result<Option<Vec<CallHierarchyIncomingCall>>, Error> {
+        //-> Result<Option<CallHierarchyItem>, Error>
         let params = Request::<CallHierarchyIncomingCalls>::new(CallHierarchyIncomingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: Default::default(),
-            partial_result_params: Default::default()
+            partial_result_params: Default::default(),
         });
         self.request(params)
     }
@@ -367,7 +403,7 @@ pub struct LanguageServerLauncher {
 
 impl LanguageServerLauncher {
     pub fn new() -> LanguageServerLauncher {
-        LanguageServerLauncher{
+        LanguageServerLauncher {
             server_path: "".to_owned(),
             project_path: "".to_owned(),
             languages: Vec::new(),

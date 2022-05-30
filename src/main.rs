@@ -1,19 +1,19 @@
-use lsp_types::request::{Initialize, Shutdown, DocumentSymbolRequest};
-use lsp_types::*;
-use lsp_types::notification::{DidOpenTextDocument, Initialized, Exit};
 use lsp_types::notification::Notification as LspNotification;
+use lsp_types::notification::{DidOpenTextDocument, Exit, Initialized};
 use lsp_types::request::Request as LspRequest;
+use lsp_types::request::{DocumentSymbolRequest, Initialize, Shutdown};
+use lsp_types::*;
 use tabbycat;
 
+use crate::searcher::ClangdServer;
 use structopt;
 use structopt::StructOpt;
-use crate::searcher::ClangdServer;
+use std::convert::TryInto;
 
-mod parser;
-mod lang_server;
 mod graph;
+mod lang_server;
+mod parser;
 mod searcher;
-
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
@@ -29,7 +29,9 @@ pub struct Opt {
 fn main() {
     if let Err(err) = try_main() {
         eprintln!("ERROR: {}", err);
-        err.chain().skip(1).for_each(|cause| eprintln!("because: {}", cause));
+        err.chain()
+            .skip(1)
+            .for_each(|cause| eprintln!("because: {}", cause));
         std::process::exit(1);
     }
 }
@@ -39,17 +41,17 @@ fn try_main() -> anyhow::Result<()> {
 
     //let lsp_server: searcher::LSPServer = searcher::LSPServer::new(opt.project_path);
     let lsp_server = searcher::ClangdServer::new(opt.project_path.clone());
-    let mut parser = parser::parser::new(opt.project_path, lsp_server);
+    let mut parser = parser::PestParser::new(lsp_server);
 
     parser.parse(opt.query.as_str());
 
-    let mut out : Box<dyn std::io::Write> = if let Some(filename) = opt.output {
+    let mut out: Box<dyn std::io::Write> = if let Some(filename) = opt.output {
         Box::new(std::fs::File::create(filename)?)
     } else {
         Box::new(std::io::stdout())
     };
 
-    let g : tabbycat::Graph = parser.graph.try_into()?;
+    let g: tabbycat::Graph = parser.graph.try_into()?;
     out.write(g.to_string().as_bytes())?;
 
     Ok(())
