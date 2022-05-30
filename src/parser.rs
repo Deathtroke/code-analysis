@@ -12,7 +12,7 @@ use std::io::prelude::*;
 
 use regex::Regex;
 
-use crate::searcher::{DefaultEdge, ForcedEdge, FunctionEdge, LSPServer, MatchFunctionEdge};
+use crate::searcher::{ParentChildEdge, ForcedEdge, FunctionNode, LSPServer, MatchFunctionEdge};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -51,7 +51,7 @@ impl parser {
         p
     }
 
-    pub fn parse(&mut self, input: &str) -> HashSet<FunctionEdge>{
+    pub fn parse(&mut self, input: &str) -> HashSet<FunctionNode>{
         let pair = parse_grammar(input);
         if pair.is_ok() {
             self.parse_statements(pair.unwrap().next().unwrap())
@@ -61,8 +61,8 @@ impl parser {
         }
     }
 
-    fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionEdge> {
-        let mut function_names: HashSet<FunctionEdge> = HashSet::new();
+    fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionNode> {
+        let mut function_names: HashSet<FunctionNode> = HashSet::new();
         //let mut overwrite_name : String = "".to_string();
 
         for inner_pair in pair.to_owned().into_inner() {
@@ -113,11 +113,11 @@ impl parser {
     }
 */
 
-    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionEdge>) -> HashSet<FunctionEdge> {
+    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
         let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
-        let mut child_names: HashSet<FunctionEdge> = HashSet::new();
+        let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut do_search = false;
-        for inner_pair in pair.to_owned().into_inner() {
+        for inner_pair in pair.into_inner() {
             match inner_pair.as_rule() {
                 Rule::verb => {
                     let filter = self.parse_verb(inner_pair);
@@ -144,7 +144,7 @@ impl parser {
             for mut parent in parent_names {
                 if child_names.clone().len() > 0 {
                     for mut child in child_names.to_owned(){
-                        if parent.clone().match_strategy.do_match(child.to_owned()) {
+                        if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
                             self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
                         }
@@ -166,7 +166,11 @@ impl parser {
         } else {
             for mut child in child_names {
                 for parent in self.lang_server.search_parent(child.function_name.clone()) {
-                    parents.insert(FunctionEdge{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(DefaultEdge{lsp_server: &self.lang_server}) });
+                    let prent_cild_edge = ParentChildEdge{
+                        function_name: parent.clone(),
+                        document: "".to_string()
+                    };
+                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(prent_cild_edge) });
                     self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
                 }
             }
