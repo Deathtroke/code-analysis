@@ -1,6 +1,6 @@
 use super::*;
 use std::collections::HashSet;
-use crate::searcher::{ForcedEdge, LSPServer};
+use crate::searcher::{ForcedNode, LSPServer};
 
 #[cfg(test)]
 struct MockLSPServer;
@@ -49,7 +49,7 @@ impl LSPServer for MockLSPServer {
         let mut result: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
             if f.contains_key(&FilterName::Function) {
-                let forced = ForcedEdge {
+                let forced = ForcedNode {
                     function_name: f.get(&FilterName::Function).unwrap().clone(),
                     document: "".to_string()
                 };

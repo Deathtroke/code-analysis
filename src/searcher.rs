@@ -86,7 +86,7 @@ impl Clone for FunctionNode {
     fn clone(&self) -> Self {
         match self.match_strategy.get_implementation().as_str() {
             "ForcedEdge" => {
-                let strategy = ForcedEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ForcedNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.function_name.clone(),
@@ -95,7 +95,7 @@ impl Clone for FunctionNode {
 
             }
             "ParentChildEdge" => {
-                let strategy = ParentChildEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ParentChildNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.function_name.clone(),
@@ -113,17 +113,17 @@ pub trait MatchFunctionEdge {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct ForcedEdge{
+pub struct ForcedNode {
     pub function_name: String,
     pub document: String,
 }
 
-pub struct ParentChildEdge {
+pub struct ParentChildNode {
     pub function_name: String,
     pub document: String,
 }
 
-impl MatchFunctionEdge for ForcedEdge {
+impl MatchFunctionEdge for ForcedNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
         #[allow(dead_code)]
         if false {match_target; lsp_server; unimplemented!()}
@@ -135,7 +135,7 @@ impl MatchFunctionEdge for ForcedEdge {
 
 }
 
-impl MatchFunctionEdge for ParentChildEdge {
+impl MatchFunctionEdge for ParentChildNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
         lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
     }
@@ -330,7 +330,7 @@ impl LSPServer for ClangdServer {
                         let names =
                             self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            let prent_child_edge = ParentChildEdge{
+                            let prent_child_edge = ParentChildNode {
                                 function_name: name.clone(),
                                 document: file_path.clone()
                             };

@@ -7,7 +7,7 @@ use super::*;
 
 use regex::Regex;
 
-use crate::searcher::{ParentChildEdge, FunctionNode};
+use crate::searcher::{ParentChildNode, FunctionNode};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -72,19 +72,19 @@ pub fn parse_ast(source: &str) -> Result<Vec<AstNode>, pest::error::Error<Rule>>
 
 fn build_ast_from_statements(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
-        Rule::statement => parse_ast_statement(pair.into_inner()),
+        Rule::statement => build_ast_from_statement(pair.into_inner()),
         _ => panic!("{:?}", pair),
     }
 }
 
-fn parse_ast_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
+fn build_ast_from_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
     let mut verb = vec![];
     let mut scope = Option::None;
 
     for pair in pairs {
         match pair.as_rule() {
-            Rule::verb => verb.push(parse_ast_verb(pair.into_inner().next().unwrap())),
-            Rule::scope => {scope = Some(parse_ast_scope(pair.into_inner().next().unwrap()))},
+            Rule::verb => verb.push(build_ast_from_verb(pair.into_inner().next().unwrap())),
+            Rule::scope => {scope = Some(build_ast_from_scope(pair.into_inner().next().unwrap()))},
             _=>{}
         }
     }
@@ -96,7 +96,7 @@ fn parse_ast_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
 
 }
 
-fn parse_ast_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
+fn build_ast_from_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
     let mut named_parameter:Vec<AstNode> = vec![];
     let mut ident = String::new();
 
@@ -104,7 +104,7 @@ fn parse_ast_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::ident => {
             ident = pair.as_str().to_string();
         },
-        Rule::named_parameter => {named_parameter = parse_ast_named_parameter(pair.into_inner())},
+        Rule::named_parameter => {named_parameter = build_ast_from_named_parameter(pair.into_inner())},
         _ => { },
     }
 
@@ -114,7 +114,7 @@ fn parse_ast_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
     }
 }
 
-fn parse_ast_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
+fn build_ast_from_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
     let mut named_parameters:Vec<AstNode> = vec![];
     for pair in pairs {
         let mut ident = String::new();
@@ -139,7 +139,7 @@ fn parse_ast_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode
 
 }
 
-fn parse_ast_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
+fn build_ast_from_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::statements => build_ast_from_statements(pair.into_inner().next().unwrap()),
         _ => panic!("{:?}", pair),
@@ -164,21 +164,21 @@ impl PestParser {
     pub fn parse(&mut self, input: &str) -> HashSet<FunctionNode>{
         let pair = parse_grammar(input);
         if pair.is_ok() {
-            self.parse_statements(pair.unwrap().next().unwrap())
+            self.interpret_statements(pair.unwrap().next().unwrap())
         } else {
             println!("unable to parse input: {:?}", pair.err());
             HashSet::new()
         }
     }
 
-    fn parse_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionNode> {
+    fn interpret_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionNode> {
         let mut function_names: HashSet<FunctionNode> = HashSet::new();
         //let mut overwrite_name : String = "".to_string();
 
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::statement =>{
-                    function_names = self.parse_statement(inner_pair,function_names);
+                    function_names = self.interpret_statement(inner_pair, function_names);
                 }
                 _ => {}
             }
@@ -223,14 +223,14 @@ impl PestParser {
     }
 */
 
-    fn parse_statement (&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
+    fn interpret_statement(&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
         let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
         let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut do_search = false;
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
                 Rule::verb => {
-                    let filter = self.parse_verb(inner_pair);
+                    let filter = self.interpret_verb(inner_pair);
                     parent_filter.push(filter);
                 }
                 Rule::scope => {
@@ -238,7 +238,7 @@ impl PestParser {
                     let scope = inner_pair.into_inner().nth(0).unwrap(); //there is always a nth(0) -> the found scope pair
                     match scope.as_rule() {
                         Rule::statements => {
-                            child_names = self.parse_statements(scope);
+                            child_names = self.interpret_statements(scope);
                         }
                         _ => {}
                     }
@@ -273,11 +273,11 @@ impl PestParser {
         } else {
             for child in child_names {
                 for parent in self.lang_server.search_parent(child.function_name.clone()) {
-                    let prent_cild_edge = ParentChildEdge{
+                    let prent_child_edge = ParentChildNode {
                         function_name: parent.clone(),
                         document: "".to_string()
                     };
-                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(prent_cild_edge) });
+                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(prent_child_edge) });
                     self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
                 }
             }
@@ -285,7 +285,7 @@ impl PestParser {
         parents
     }
 
-    fn parse_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
+    fn interpret_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
         let mut filter: HashMap<FilterName, String> = HashMap::new();
         for inner_pair in pair.to_owned().into_inner() {
             match inner_pair.as_rule() {
@@ -294,7 +294,7 @@ impl PestParser {
                     filter.insert(FilterName::Function, ident.to_string());
                 }
                 Rule::named_parameter => {
-                    let filter_option = self.parse_define_options(inner_pair);
+                    let filter_option = self.interpret_define_options(inner_pair);
                     if filter_option.is_some(){
                         let filter_option_unwrap = filter_option.unwrap();
                         filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
@@ -307,7 +307,7 @@ impl PestParser {
         filter
     }
 
-    fn parse_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, String)> {
+    fn interpret_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, String)> {
         let mut filter_name = "";
         let mut value = "";
         for inner_pair in pair.to_owned().into_inner() {
