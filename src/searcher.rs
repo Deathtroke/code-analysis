@@ -371,16 +371,17 @@ impl LSPServer for ClangdServer {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
-                        //println!("func {}", func_name);
                         if func_filter.is_match(func_name.as_str()) {
                             let prep_call_hierarchy = self
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            println!("{:?}", call_hierarchy_array[0].clone());
                             if call_hierarchy_array.len() > 0 {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
+                                println!("{:?}", outgoing_calls);
                                 for outgoing_call in outgoing_calls.unwrap().unwrap() {
                                     if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                         && file_filter_c.is_match(outgoing_call.to.uri.as_str())

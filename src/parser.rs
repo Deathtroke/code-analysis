@@ -36,12 +36,14 @@ pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule
 #[derive(Debug)]
 pub enum AstNode {
     Print(Box<AstNode>),
+    Ident(String),
+    Regex(Regex),
     NamedParameter {
-        ident: String,
-        regex: Regex,
+        ident: Box<AstNode>,
+        regex: Box<AstNode>,
     },
     Verb {
-        ident: String,
+        ident: Box<AstNode>,
         named_parameter:Vec<AstNode>,
     },
     Scope(Box<AstNode>),
@@ -98,18 +100,18 @@ fn build_ast_from_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
 
 fn build_ast_from_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
     let mut named_parameter:Vec<AstNode> = vec![];
-    let mut ident = String::new();
+    let mut ident_str = String::new();
 
     match pair.as_rule() {
         Rule::ident => {
-            ident = pair.as_str().to_string();
+            ident_str = pair.as_str().to_string();
         },
         Rule::named_parameter => {named_parameter = build_ast_from_named_parameter(pair.into_inner())},
         _ => { },
     }
 
     AstNode::Verb {
-        ident,
+        ident: Box::new(AstNode::Ident(ident_str)),
         named_parameter,
     }
 }
@@ -117,22 +119,22 @@ fn build_ast_from_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
 fn build_ast_from_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
     let mut named_parameters:Vec<AstNode> = vec![];
     for pair in pairs {
-        let mut ident = String::new();
-        let mut regex = Regex::new(".").unwrap();
+        let mut ident_str = String::new();
+        let mut regex_expr = Regex::new(".").unwrap();
         match pair.as_rule() {
             Rule::ident => {
                 let mut inner_pair = pair.into_inner();
-                ident = inner_pair.next().unwrap().as_str().to_string();
+                ident_str = inner_pair.next().unwrap().as_str().to_string();
             },
             Rule::regex => {
                 let mut inner_pair = pair.into_inner();
-                regex = Regex::new(inner_pair.next().unwrap().as_str()).unwrap();
+                regex_expr = Regex::new(inner_pair.next().unwrap().as_str()).unwrap();
             },
             _ => {},
         }
         named_parameters.push(AstNode::NamedParameter {
-            ident,
-            regex
+            ident: Box::new(AstNode::Ident(ident_str)),
+            regex: Box::new(AstNode::Regex(regex_expr))
         });
     }
     named_parameters
@@ -248,6 +250,7 @@ impl PestParser {
         }
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
+            println!("{}",parent_names.iter().nth(0).unwrap().function_name);
             for parent in parent_names {
                 if child_names.to_owned().len() > 0 {
                     for child in child_names.to_owned(){
@@ -258,11 +261,15 @@ impl PestParser {
                     }
                 } else {
                     if do_search {
-                        let children = self.lang_server.search_child(parent.function_name.clone());
+                        let children = self.lang_server.search_child_single_document_filter(
+                            Regex::new(parent.function_name.clone().as_str()).unwrap(),
+                            HashMap::new(),
+                            parent.document.clone().as_str()
+                        );
                         if children.len() > 0 {
                             parents.insert(parent.clone());
                             for child in children{
-                                self.graph.insert_edge(None, parent.clone().function_name.clone(), child);
+                                self.graph.insert_edge(None, parent.clone().function_name.clone(), child.1);
                             }
                         }
                     } else {
