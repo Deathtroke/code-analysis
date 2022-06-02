@@ -3,6 +3,7 @@ use pest_derive::Parser;
 use pest::iterators::{Pair, Pairs};
 use std::collections::{HashMap, HashSet};
 use std::string::String;
+use log::{log, Level};
 use super::*;
 
 use regex::Regex;
@@ -33,7 +34,7 @@ pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule
     pair
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum AstNode {
     Print(Box<AstNode>),
     Ident(String),
@@ -84,8 +85,9 @@ fn build_ast_from_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
     let mut scope = Option::None;
 
     for pair in pairs {
+
         match pair.as_rule() {
-            Rule::verb => verb.push(build_ast_from_verb(pair.into_inner().next().unwrap())),
+            Rule::verb => verb.push(build_ast_from_verb(pair.into_inner())),
             Rule::scope => {scope = Some(build_ast_from_scope(pair.into_inner().next().unwrap()))},
             _=>{}
         }
@@ -98,46 +100,51 @@ fn build_ast_from_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
 
 }
 
-fn build_ast_from_verb(pair: pest::iterators::Pair<Rule>) -> AstNode {
+fn build_ast_from_verb(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
     let mut named_parameter:Vec<AstNode> = vec![];
     let mut ident_str = String::new();
 
-    match pair.as_rule() {
-        Rule::ident => {
-            ident_str = pair.as_str().to_string();
-        },
-        Rule::named_parameter => {named_parameter = build_ast_from_named_parameter(pair.into_inner())},
-        _ => { },
+    for pair in pairs {
+        match pair.as_rule() {
+            Rule::ident => {
+                ident_str = pair.as_str().to_string();
+            },
+            Rule::named_parameter => {
+                let parameter = build_ast_from_named_parameter(pair.into_inner());
+                named_parameter.push(
+                    AstNode::NamedParameter {
+                        ident: Box::new(parameter.0),
+                        regex: Box::new(parameter.1)
+                    }
+                );
+            },
+            _ => { },
+        }
     }
-
     AstNode::Verb {
         ident: Box::new(AstNode::Ident(ident_str)),
         named_parameter,
     }
 }
 
-fn build_ast_from_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
-    let mut named_parameters:Vec<AstNode> = vec![];
+fn build_ast_from_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> (AstNode, AstNode) {
+    let mut ident_str = String::new();
+    let mut regex_expr = Regex::new(".").unwrap();
     for pair in pairs {
-        let mut ident_str = String::new();
-        let mut regex_expr = Regex::new(".").unwrap();
         match pair.as_rule() {
             Rule::ident => {
-                let mut inner_pair = pair.into_inner();
-                ident_str = inner_pair.next().unwrap().as_str().to_string();
+                ident_str = pair.as_str().clone().to_string();
             },
             Rule::regex => {
-                let mut inner_pair = pair.into_inner();
-                regex_expr = Regex::new(inner_pair.next().unwrap().as_str()).unwrap();
+                regex_expr = Regex::new(pair.as_str()).unwrap();
             },
             _ => {},
         }
-        named_parameters.push(AstNode::NamedParameter {
-            ident: Box::new(AstNode::Ident(ident_str)),
-            regex: Box::new(AstNode::Regex(regex_expr))
-        });
     }
-    named_parameters
+    (
+        AstNode::Ident(ident_str),
+        AstNode::Regex(regex_expr)
+    )
 
 }
 
@@ -164,25 +171,28 @@ impl PestParser {
     }
 
     pub fn parse(&mut self, input: &str) -> HashSet<FunctionNode>{
-        let pair = parse_grammar(input);
-        if pair.is_ok() {
-            self.interpret_statements(pair.unwrap().next().unwrap())
+        let ast_result = parse_ast(input);
+        if ast_result.is_ok() {
+            self.interpret_statements(ast_result.unwrap())
         } else {
-            println!("unable to parse input: {:?}", pair.err());
+            log!(Level::Error, "unable to parse input: {:?}", ast_result.err());
             HashSet::new()
         }
     }
 
-    fn interpret_statements(&mut self, pair: Pair<Rule>) -> HashSet<FunctionNode> {
+    fn interpret_statements(&mut self, ast_nodes: Vec<AstNode>) -> HashSet<FunctionNode> {
         let mut function_names: HashSet<FunctionNode> = HashSet::new();
         //let mut overwrite_name : String = "".to_string();
 
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::statement =>{
-                    function_names = self.interpret_statement(inner_pair, function_names);
+
+        for ast in ast_nodes {
+            match ast {
+                AstNode::Print(statement) => {
+                    function_names = self.interpret_statement(*statement, function_names);
                 }
-                _ => {}
+                _ => {
+                    function_names = self.interpret_statement(ast, function_names);
+                }
             }
         }
         function_names
@@ -225,29 +235,29 @@ impl PestParser {
     }
 */
 
-    fn interpret_statement(&mut self, pair: Pair<Rule>, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
-        let mut parent_filter: Vec<HashMap<FilterName, String>> = Vec::new();
+    fn interpret_statement(&mut self, ast: AstNode, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
+        let mut parent_filter: Vec<HashMap<FilterName, Regex>> = Vec::new();
         let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut do_search = false;
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::verb => {
-                    let filter = self.interpret_verb(inner_pair);
+        match ast {
+            AstNode::Statement { verb, scope } => {
+                if verb.len() > 0 {
+                    let filter = self.interpret_verb(verb);
                     parent_filter.push(filter);
                 }
-                Rule::scope => {
+                if scope.is_some() {
                     do_search = true;
-                    let scope = inner_pair.into_inner().nth(0).unwrap(); //there is always a nth(0) -> the found scope pair
-                    match scope.as_rule() {
-                        Rule::statements => {
-                            child_names = self.interpret_statements(scope);
+                    match scope.unwrap() {
+                        AstNode::Statements(statements) => {
+                            child_names = self.interpret_statements(statements);
                         }
                         _ => {}
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
+
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
             for parent in parent_names {
@@ -291,54 +301,74 @@ impl PestParser {
         parents
     }
 
-    fn interpret_verb(&mut self, pair: Pair<Rule>) -> HashMap<FilterName, String>{
-        let mut filter: HashMap<FilterName, String> = HashMap::new();
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::ident => {
-                    let ident = inner_pair.as_str();
-                    filter.insert(FilterName::Function, ident.to_string());
-                }
-                Rule::named_parameter => {
-                    let filter_option = self.interpret_define_options(inner_pair);
-                    if filter_option.is_some(){
-                        let filter_option_unwrap = filter_option.unwrap();
-                        filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
+    fn interpret_verb(&mut self, ast_nodes: Vec<AstNode>) -> HashMap<FilterName, Regex>{
+        let mut filter: HashMap<FilterName, Regex> = HashMap::new();
+        for ast in ast_nodes {
+            match ast {
+                AstNode::Verb { ident,named_parameter } =>{
+                    match *ident {
+                        AstNode::Ident(ident) => {
+                            match ident.as_str() {
+                                "filter" => {
+                                    for parameter in named_parameter {
+                                        let filter_option = self.interpret_define_options(parameter);
+                                        if filter_option.is_some() {
+                                            let filter_option_unwrap = filter_option.unwrap();
+                                            filter.insert(filter_option_unwrap.0, filter_option_unwrap.1);
+                                        }
+                                    }
+                                }
+                                "forced" => {
+                                    todo!()
+                                }
+                                _ => {
+                                    filter.insert(FilterName::Function, Regex::new(ident.as_str()).unwrap());
+                                }
+                            }
+                        }
+                        _ => {}
                     }
+
                 }
                 _ => {}
             }
         }
-
         filter
     }
 
-    fn interpret_define_options(&mut self, pair: Pair<Rule>) -> Option<(FilterName, String)> {
-        let mut filter_name = "";
-        let mut value = "";
-        for inner_pair in pair.to_owned().into_inner() {
-            match inner_pair.as_rule() {
-                Rule::ident => {
-                    filter_name = inner_pair.as_str();
+    fn interpret_define_options(&mut self, ast: AstNode) -> Option<(FilterName, Regex)> {
+        let mut filter_name = String::new();
+        let mut value = Regex::new(".").unwrap();
+        match ast {
+            AstNode::NamedParameter { ident, regex } => {
+                match *ident {
+                    AstNode::Ident(ident) => {
+                        filter_name = ident.to_owned();
+                    }
+                    _ =>{}
                 }
-                Rule::regex => {
-                    value = inner_pair.as_str();
+
+                match *regex {
+                    AstNode::Regex(regex) => {
+                        value = regex;
+                    }
+                    _ =>{}
                 }
-                _ => {}
             }
+            _ => {}
         }
 
         match filter_name.to_lowercase().as_str(){
             "function" => {
                 Some(
                     (FilterName::Function,
-                    value.to_string())
+                    value)
                 )
             }
             "file" => {
                 Some(
                     (FilterName::File,
-                     value.to_string())
+                     value)
                 )
             }
             _ => {

@@ -18,7 +18,7 @@ pub trait LSPServer {
     ) -> HashSet<(String, String)>;
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<parser::FilterName, String>>,
+        filter: Vec<HashMap<parser::FilterName, Regex>>,
     ) -> HashSet<FunctionNode>;
     fn search_child_single_document_filter(
         &mut self,
@@ -296,20 +296,20 @@ impl LSPServer for ClangdServer {
 
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<parser::FilterName, String>>,
+        filter: Vec<HashMap<parser::FilterName, Regex>>,
     ) -> HashSet<FunctionNode> {
         let mut func_names: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::File) {
                 let regex = f.get(&parser::FilterName::File).unwrap();
-                file_filter = Regex::new(regex.clone().as_str()).unwrap();
+                file_filter = regex.to_owned();
             }
 
             let mut function_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::Function) {
                 let regex = f.get(&parser::FilterName::Function).unwrap();
-                function_filter = Regex::new(regex.as_str()).unwrap();
+                function_filter = regex.to_owned();
             }
             for file_path in self.files_in_project.clone() {
                 if file_filter.is_match(file_path.as_str()) {

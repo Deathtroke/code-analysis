@@ -355,7 +355,6 @@ impl LanguageServer for ClangdLanguageServer {
         document: &TextDocumentItem,
         position: Position,
     ) -> Result<Option<Vec<CallHierarchyItem>>, Error> {
-        //-> Result<Option<CallHierarchyItem>, Error>
         let params = Request::<CallHierarchyPrepare>::new(CallHierarchyPrepareParams {
             text_document_position_params: TextDocumentPositionParams {
                 text_document: TextDocumentIdentifier {
@@ -372,7 +371,7 @@ impl LanguageServer for ClangdLanguageServer {
         &mut self,
         call_hierarchy_item: CallHierarchyItem,
     ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>, Error> {
-        //-> Result<Option<CallHierarchyItem>, Error>
+        println!("send outgoing request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyOutgoingCalls>::new(CallHierarchyOutgoingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: Default::default(),
@@ -385,7 +384,7 @@ impl LanguageServer for ClangdLanguageServer {
         &mut self,
         call_hierarchy_item: CallHierarchyItem,
     ) -> Result<Option<Vec<CallHierarchyIncomingCall>>, Error> {
-        //-> Result<Option<CallHierarchyItem>, Error>
+        println!("send incoming request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyIncomingCalls>::new(CallHierarchyIncomingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: Default::default(),
