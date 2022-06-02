@@ -300,6 +300,11 @@ impl LSPServer for ClangdServer {
     ) -> HashSet<FunctionNode> {
         let mut func_names: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
+            let mut forced = false;
+            if f.contains_key(&parser::FilterName::Forced) {
+                forced = true;
+            }
+
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::File) {
                 let regex = f.get(&parser::FilterName::File).unwrap();
@@ -330,16 +335,35 @@ impl LSPServer for ClangdServer {
                         let names =
                             self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            let prent_child_edge = ParentChildNode {
-                                function_name: name.clone(),
-                                document: file_path.clone()
-                            };
-                            func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(prent_child_edge)});
+                            if forced {
+                                let node = ForcedNode {
+                                    function_name: name.clone(),
+                                    document: file_path.clone()
+                                };
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+                                println!("created forced node")
+                            } else {
+                                let node = ParentChildNode {
+                                    function_name: name.clone(),
+                                    document: file_path.clone()
+                                };
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+
+                            }
                         }
                     }
                 }
             }
+            if func_names.len() == 0 && function_filter.as_str() != "." {
+                let node = ParentChildNode {
+                    function_name: function_filter.as_str().to_string(),
+                    document: "not found".to_string()
+                };
+                func_names.insert( FunctionNode{function_name: node.function_name.clone(), document: node.document.clone(), match_strategy: Box::new(node)});
+
+            }
         }
+
 
         func_names
     }

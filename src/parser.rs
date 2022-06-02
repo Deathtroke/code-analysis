@@ -8,7 +8,7 @@ use super::*;
 
 use regex::Regex;
 
-use crate::searcher::{ParentChildNode, FunctionNode};
+use crate::searcher::{ParentChildNode, FunctionNode, ForcedNode};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]
@@ -25,6 +25,7 @@ pub struct PestParser {
 pub enum FilterName {
     Function,
     File,
+    Forced,
 }
 
 pub fn parse_grammar(input: &str) -> Result<Pairs<Rule>, pest::error::Error<Rule>> {
@@ -63,7 +64,9 @@ pub fn parse_ast(source: &str) -> Result<Vec<AstNode>, pest::error::Error<Rule>>
     for pair in pairs {
         match pair.as_rule() {
             Rule::statements => {
-                ast.push(AstNode::Print(Box::new(build_ast_from_statements(pair.into_inner().next().unwrap()))));
+                ast.push(AstNode::Print(Box::new(
+                    AstNode::Statements(build_ast_from_statements(pair.into_inner()))
+                )));
             }
             _ => {}
         }
@@ -73,11 +76,15 @@ pub fn parse_ast(source: &str) -> Result<Vec<AstNode>, pest::error::Error<Rule>>
 }
 
 
-fn build_ast_from_statements(pair: pest::iterators::Pair<Rule>) -> AstNode {
-    match pair.as_rule() {
-        Rule::statement => build_ast_from_statement(pair.into_inner()),
-        _ => panic!("{:?}", pair),
+fn build_ast_from_statements(pairs: pest::iterators::Pairs<Rule>) -> Vec<AstNode> {
+    let mut statements : Vec<AstNode> = Vec::new();
+    for pair in pairs{
+        match pair.as_rule() {
+            Rule::statement => statements.push(build_ast_from_statement(pair.into_inner())),
+            _ => panic!("{:?}", pair),
+        }
     }
+    statements
 }
 
 fn build_ast_from_statement(pairs: pest::iterators::Pairs<Rule>) -> AstNode {
@@ -150,7 +157,11 @@ fn build_ast_from_named_parameter(pairs: pest::iterators::Pairs<Rule>) -> (AstNo
 
 fn build_ast_from_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
-        Rule::statements => build_ast_from_statements(pair.into_inner().next().unwrap()),
+        Rule::statements => {
+            AstNode::Scope(Box::new(
+                AstNode::Statements(build_ast_from_statements(pair.into_inner()))
+            ))
+        },
         _ => panic!("{:?}", pair),
     }
 }
@@ -187,8 +198,14 @@ impl PestParser {
 
         for ast in ast_nodes {
             match ast {
-                AstNode::Print(statement) => {
-                    function_names = self.interpret_statement(*statement, function_names);
+                AstNode::Print(print) => {
+                    match *print {
+                        AstNode::Statements(statements) => {
+                            function_names = self.interpret_statements(statements);
+
+                        },
+                        _ => {}
+                    }
                 }
                 _ => {
                     function_names = self.interpret_statement(ast, function_names);
@@ -248,8 +265,13 @@ impl PestParser {
                 if scope.is_some() {
                     do_search = true;
                     match scope.unwrap() {
-                        AstNode::Statements(statements) => {
-                            child_names = self.interpret_statements(statements);
+                        AstNode::Scope(scope_inner) => {
+                            match *scope_inner {
+                                AstNode::Statements(statements) => {
+                                    child_names = self.interpret_statements(statements);
+                                }
+                                _=>{}
+                            }
                         }
                         _ => {}
                     }
@@ -289,11 +311,12 @@ impl PestParser {
         } else {
             for child in child_names {
                 for parent in self.lang_server.search_parent(child.function_name.clone()) {
-                    let prent_child_edge = ParentChildNode {
+                    let node = ParentChildNode {
                         function_name: parent.clone(),
                         document: "".to_string()
                     };
-                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(prent_child_edge) });
+                    parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(node) });
+
                     self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
                 }
             }
@@ -319,7 +342,7 @@ impl PestParser {
                                     }
                                 }
                                 "forced" => {
-                                    todo!()
+                                    filter.insert(FilterName::Forced, Regex::new("TRUE").unwrap());
                                 }
                                 _ => {
                                     filter.insert(FilterName::Function, Regex::new(ident.as_str()).unwrap());
