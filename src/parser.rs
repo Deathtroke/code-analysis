@@ -250,7 +250,6 @@ impl PestParser {
         }
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
-            println!("{}",parent_names.iter().nth(0).unwrap().function_name);
             for parent in parent_names {
                 if child_names.to_owned().len() > 0 {
                     for child in child_names.to_owned(){
