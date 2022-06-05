@@ -44,13 +44,13 @@ impl LSPServer for MockLSPServer {
 
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<FilterName, String>>,
+        filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode> {
         let mut result: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
             if f.contains_key(&FilterName::Function) {
                 let forced = ForcedNode {
-                    function_name: f.get(&FilterName::Function).unwrap().clone(),
+                    function_name: f.get(&FilterName::Function).unwrap().clone().as_str().to_string(),
                     document: "".to_string()
                 };
                 result.insert(FunctionNode {
