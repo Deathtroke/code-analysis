@@ -1,5 +1,6 @@
 use super::*;
 use std::collections::HashSet;
+use crate::searcher::{ForcedNode, LSPServer};
 
 #[cfg(test)]
 struct MockLSPServer;
@@ -43,14 +44,19 @@ impl LSPServer for MockLSPServer {
 
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<FilterName, String>>,
-    ) -> HashSet<FunctionEdge> {
-        let mut result: HashSet<FunctionEdge> = HashSet::new();
+        filter: Vec<HashMap<FilterName, Regex>>,
+    ) -> HashSet<FunctionNode> {
+        let mut result: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
             if f.contains_key(&FilterName::Function) {
-                result.insert(FunctionEdge {
-                    function_name: f.get(&FilterName::Function).unwrap().clone(),
-                    document: "".to_string(),
+                let forced = ForcedNode {
+                    function_name: f.get(&FilterName::Function).unwrap().clone().as_str().to_string(),
+                    document: "".to_string()
+                };
+                result.insert(FunctionNode {
+                    function_name: forced.function_name.clone(),
+                    document: forced.document.clone(),
+                    match_strategy: Box::new(forced)
                 });
             }
         }
@@ -63,7 +69,11 @@ impl LSPServer for MockLSPServer {
         child_filter: HashMap<String, String>,
         document_name: &str,
     ) -> HashSet<(String, String)> {
-        unimplemented!("{:?}, {:?}, {:?}", func_filter, child_filter, document_name);
+        if false {unimplemented!("{:?} {:?}", child_filter, document_name)}
+        let mut children: HashSet<(String,String)> =
+            HashSet::from([(func_filter.to_string(), "child1".to_string()), (func_filter.to_string(), "child2".to_string())]);
+
+        children
     }
 
     fn search_parent_single_document_filter(
@@ -72,7 +82,11 @@ impl LSPServer for MockLSPServer {
         parent_filter: HashMap<String, String>,
         document_name: &str,
     ) -> HashSet<(String, String)> {
-        unimplemented!("{:?}, {:?}, {:?}", func_filter, parent_filter, document_name);
+        if false {unimplemented!("{:?} {:?}", parent_filter, document_name)}
+        let mut parents: HashSet<(String,String)> =
+            HashSet::from([("parent1".to_string(), func_filter.to_string()), ("parent2".to_string(), func_filter.to_string())]);
+
+        parents
     }
 
     fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
@@ -94,17 +108,9 @@ impl LSPServer for MockLSPServer {
 fn test_parser_simple1() {
     let input = r#"{@func}"#;
     let mut parser = PestParser::new(MockLSPServer::new());
-    let parser_output = HashSet::from([
-        FunctionEdge {
-            function_name: "parent1".to_string(),
-            document: "".to_string(),
-        },
-        FunctionEdge {
-            function_name: "parent2".to_string(),
-            document: "".to_string(),
-        },
-    ]);
-    assert_eq!(parser.parse(input), parser_output);
+    assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(0).unwrap().function_name.clone().as_str()));
+    assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
+
     let graph_output = HashSet::from([
         ("parent1".to_string(), "func".to_string()),
         ("parent2".to_string(), "func".to_string()),
@@ -116,11 +122,8 @@ fn test_parser_simple1() {
 fn test_parser_simple2() {
     let input = r#"@func {}"#;
     let mut parser = PestParser::new( MockLSPServer::new());
-    let parser_output = HashSet::from([FunctionEdge {
-        function_name: "func".to_string(),
-        document: "".to_string(),
-    }]);
-    assert_eq!(parser.parse(input), parser_output);
+
+    assert_eq!(parser.parse(input).iter().nth(0).unwrap().function_name, "func".to_string());
     let graph_output = HashSet::from([
         ("func".to_string(), "child1".to_string()),
         ("func".to_string(), "child2".to_string()),
@@ -132,17 +135,9 @@ fn test_parser_simple2() {
 fn test_parser() {
     let input = r#"{{@func}}"#;
     let mut parser = PestParser::new( MockLSPServer::new());
-    let parser_output = HashSet::from([
-        FunctionEdge {
-            function_name: "parent1".to_string(),
-            document: "".to_string(),
-        },
-        FunctionEdge {
-            function_name: "parent2".to_string(),
-            document: "".to_string(),
-        },
-    ]);
-    assert_eq!(parser.parse(input), parser_output);
+    assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(0).unwrap().function_name.clone().as_str()));
+    assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
+
     let graph_output = HashSet::from([
         ("parent1".to_string(), "func".to_string()),
         ("parent1".to_string(), "parent1".to_string()),

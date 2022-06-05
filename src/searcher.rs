@@ -18,7 +18,7 @@ pub trait LSPServer {
     ) -> HashSet<(String, String)>;
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<parser::FilterName, String>>,
+        filter: Vec<HashMap<parser::FilterName, Regex>>,
     ) -> HashSet<FunctionNode>;
     fn search_child_single_document_filter(
         &mut self,
@@ -76,7 +76,7 @@ impl Hash for FunctionNode {
 
 impl PartialEq for FunctionNode {
     fn eq(&self, other: &Self) -> bool {
-        (self.document == other.document && self.function_name == other.function_name)
+        self.document == other.document && self.function_name == other.function_name
     }
 }
 
@@ -86,7 +86,7 @@ impl Clone for FunctionNode {
     fn clone(&self) -> Self {
         match self.match_strategy.get_implementation().as_str() {
             "ForcedEdge" => {
-                let strategy = ForcedEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ForcedNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.function_name.clone(),
@@ -95,7 +95,7 @@ impl Clone for FunctionNode {
 
             }
             "ParentChildEdge" => {
-                let strategy = ParentChildEdge { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ParentChildNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.function_name.clone(),
@@ -113,18 +113,19 @@ pub trait MatchFunctionEdge {
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct ForcedEdge{
+pub struct ForcedNode {
     pub function_name: String,
     pub document: String,
 }
 
-pub struct ParentChildEdge {
+pub struct ParentChildNode {
     pub function_name: String,
     pub document: String,
 }
 
-impl MatchFunctionEdge for ForcedEdge {
+impl MatchFunctionEdge for ForcedNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+        #[allow(dead_code)]
         if false {match_target; lsp_server; unimplemented!()}
         true
     }
@@ -134,7 +135,7 @@ impl MatchFunctionEdge for ForcedEdge {
 
 }
 
-impl MatchFunctionEdge for ParentChildEdge {
+impl MatchFunctionEdge for ParentChildNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
         lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
     }
@@ -295,20 +296,25 @@ impl LSPServer for ClangdServer {
 
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<parser::FilterName, String>>,
+        filter: Vec<HashMap<parser::FilterName, Regex>>,
     ) -> HashSet<FunctionNode> {
         let mut func_names: HashSet<FunctionNode> = HashSet::new();
         for f in filter {
+            let mut forced = false;
+            if f.contains_key(&parser::FilterName::Forced) {
+                forced = true;
+            }
+
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::File) {
                 let regex = f.get(&parser::FilterName::File).unwrap();
-                file_filter = Regex::new(regex.clone().as_str()).unwrap();
+                file_filter = regex.to_owned();
             }
 
             let mut function_filter = Regex::new(".").unwrap();
             if f.contains_key(&parser::FilterName::Function) {
                 let regex = f.get(&parser::FilterName::Function).unwrap();
-                function_filter = Regex::new(regex.as_str()).unwrap();
+                function_filter = regex.to_owned();
             }
             for file_path in self.files_in_project.clone() {
                 if file_filter.is_match(file_path.as_str()) {
@@ -329,16 +335,35 @@ impl LSPServer for ClangdServer {
                         let names =
                             self.find_functions_in_doc(function_filter.clone(), file_path.as_str());
                         for name in names {
-                            let prent_child_edge = ParentChildEdge{
-                                function_name: name.clone(),
-                                document: file_path.clone()
-                            };
-                            func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(prent_child_edge)});
+                            if forced {
+                                let node = ForcedNode {
+                                    function_name: name.clone(),
+                                    document: file_path.clone()
+                                };
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+                                println!("created forced node")
+                            } else {
+                                let node = ParentChildNode {
+                                    function_name: name.clone(),
+                                    document: file_path.clone()
+                                };
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+
+                            }
                         }
                     }
                 }
             }
+            if func_names.len() == 0 && function_filter.as_str() != "." {
+                let node = ParentChildNode {
+                    function_name: function_filter.as_str().to_string(),
+                    document: "not found".to_string()
+                };
+                func_names.insert( FunctionNode{function_name: node.function_name.clone(), document: node.document.clone(), match_strategy: Box::new(node)});
+
+            }
         }
+
 
         func_names
     }
@@ -370,16 +395,17 @@ impl LSPServer for ClangdServer {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
-                        //println!("func {}", func_name);
                         if func_filter.is_match(func_name.as_str()) {
                             let prep_call_hierarchy = self
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            println!("{:?}", call_hierarchy_array[0].clone());
                             if call_hierarchy_array.len() > 0 {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
+                                println!("{:?}", outgoing_calls);
                                 for outgoing_call in outgoing_calls.unwrap().unwrap() {
                                     if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                         && file_filter_c.is_match(outgoing_call.to.uri.as_str())

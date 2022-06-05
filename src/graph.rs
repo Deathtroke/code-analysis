@@ -33,7 +33,7 @@ impl Serialize for Graph {
     {
         let mut s = serializer.serialize_seq(Some(self.edges.len()))?;
         for edge in &self.edges {
-            s.serialize_element(&edge);
+            s.serialize_element(&edge)?;
         }
         s.end()
     }

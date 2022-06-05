@@ -5,7 +5,6 @@ use lsp_types::request::{DocumentSymbolRequest, Initialize, Shutdown};
 use lsp_types::*;
 use tabbycat;
 
-use crate::searcher::ClangdServer;
 use structopt;
 use structopt::StructOpt;
 use std::convert::TryInto;
