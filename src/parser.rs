@@ -287,7 +287,7 @@ impl PestParser {
                     for child in child_names.to_owned(){
                         if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
-                            self.graph.insert_edge(None, parent.function_name.clone(), child.function_name.clone());
+                            self.graph.insert_edge(None, parent.function_name.clone(), Some(child.function_name.clone()));
                         }
                     }
                 } else {
@@ -300,11 +300,12 @@ impl PestParser {
                         if children.len() > 0 {
                             parents.insert(parent.clone());
                             for child in children{
-                                self.graph.insert_edge(None, parent.clone().function_name.clone(), child.1);
+                                self.graph.insert_edge(None, parent.clone().function_name.clone(), Some(child.1));
                             }
                         }
                     } else {
-                        parents.insert(parent);
+                        parents.insert(parent.clone());
+                        self.graph.insert_edge(None, parent.clone().function_name.clone(), None);
                     }
                 }
             }
@@ -317,7 +318,7 @@ impl PestParser {
                     };
                     parents.insert(FunctionNode{ function_name: parent.clone(), document: "".to_string(), match_strategy: Box::new(node) });
 
-                    self.graph.insert_edge(None, parent.clone(), child.function_name.clone());
+                    self.graph.insert_edge(None, parent.clone(), Some(child.function_name.clone()));
                 }
             }
         }

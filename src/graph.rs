@@ -6,11 +6,11 @@ pub struct Graph {
     pub edges: HashSet<Edge>,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Clone)]
 pub struct Edge {
     edge_properties: Option<String>,
     node_from: String,
-    node_to: String,
+    node_to: Option<String>,
 }
 
 impl Serialize for Edge {
@@ -40,21 +40,36 @@ impl Serialize for Graph {
 }
 
 impl Graph {
-    pub fn graph_to_tuple(&mut self) -> HashSet<(String, String)> {
-        let mut tuples: HashSet<(String, String)> = HashSet::new();
+    pub fn graph_to_tuple(&mut self) -> HashSet<(String, Option<String>)> {
+        let mut tuples: HashSet<(String, Option<String>)> = HashSet::new();
         for edge in &self.edges {
             tuples.insert((edge.node_from.clone(), edge.node_to.clone()));
         }
         tuples
     }
 
-    pub fn insert_edge(&mut self, option: Option<String>, from: String, to: String) {
+    pub fn insert_edge(&mut self, option: Option<String>, from: String, to: Option<String>) {
         let edge = Edge {
             edge_properties: option,
             node_from: from,
             node_to: to,
         };
         self.edges.insert(edge);
+        self.clear_redundant_leaf_nodes();
+    }
+
+    fn clear_redundant_leaf_nodes(&mut self){
+        for edge in self.edges.clone() {
+            if edge.node_to.is_none(){
+                for check_edge in self.edges.clone() {
+                    if check_edge.node_to.is_some(){
+                        if check_edge.node_to.unwrap() == edge.node_from {
+                            self.edges.remove(&edge);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -65,10 +80,16 @@ impl TryFrom<Graph> for tabbycat::Graph {
         let mut stmts = tabbycat::StmtList::new();
 
         for edge in &g.edges {
-            stmts = stmts.add_edge(
-                tabbycat::Edge::head_node(tabbycat::Identity::id(edge.node_from.as_str())?, None)
-                    .arrow_to_node(tabbycat::Identity::id(edge.node_to.as_str())?, None),
-            );
+            if edge.node_to.is_some() {
+                stmts = stmts.add_edge(
+                    tabbycat::Edge::head_node(tabbycat::Identity::id(edge.node_from.as_str())?, None)
+                        .arrow_to_node(tabbycat::Identity::id(edge.node_to.as_ref().unwrap().as_str())?, None),
+                );
+            } else {
+                stmts = stmts.add_edge(
+                    tabbycat::Edge::head_node(tabbycat::Identity::id(edge.node_from.as_str())?, None)
+                );
+            }
         }
 
         tabbycat::GraphBuilder::default()

@@ -112,8 +112,8 @@ fn test_parser_simple1() {
     assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), "func".to_string()),
-        ("parent2".to_string(), "func".to_string()),
+        ("parent1".to_string(), Some("func".to_string())),
+        ("parent2".to_string(), Some("func".to_string())),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
 }
@@ -125,8 +125,8 @@ fn test_parser_simple2() {
 
     assert_eq!(parser.parse(input).iter().nth(0).unwrap().function_name, "func".to_string());
     let graph_output = HashSet::from([
-        ("func".to_string(), "child1".to_string()),
-        ("func".to_string(), "child2".to_string()),
+        ("func".to_string(), Some("child1".to_string())),
+        ("func".to_string(), Some("child2".to_string())),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
 }
@@ -139,12 +139,27 @@ fn test_parser() {
     assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), "func".to_string()),
-        ("parent1".to_string(), "parent1".to_string()),
-        ("parent1".to_string(), "parent2".to_string()),
-        ("parent2".to_string(), "func".to_string()),
-        ("parent2".to_string(), "parent1".to_string()),
-        ("parent2".to_string(), "parent2".to_string()),
+        ("parent1".to_string(), Some("func".to_string())),
+        ("parent1".to_string(), Some("parent1".to_string())),
+        ("parent1".to_string(), Some("parent2".to_string())),
+        ("parent2".to_string(), Some("func".to_string())),
+        ("parent2".to_string(), Some("parent1".to_string())),
+        ("parent2".to_string(), Some("parent2".to_string())),
+    ]);
+    assert_eq!(parser.graph.graph_to_tuple(), graph_output);
+    //let g : tabbycat::Graph = parser.graph.try_into().unwrap();
+    //assert_eq!(g.to_string(), "This test is unusable")
+}
+
+
+#[test]
+fn test_graph_only_node() {
+    let input = r#"@foo"#;
+    let mut parser = PestParser::new( MockLSPServer::new());
+    assert_eq!(parser.parse(input).iter().nth(0).unwrap().function_name, "foo".to_string());
+
+    let graph_output = HashSet::from([
+        ("foo".to_string(), None),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
     //let g : tabbycat::Graph = parser.graph.try_into().unwrap();
