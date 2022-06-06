@@ -7,6 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
+use log::{Level, log};
 
 pub trait LSPServer {
     fn search_parent(&mut self, search_target: String) -> HashSet<String>;
@@ -158,7 +159,7 @@ impl ClangdServer {
         };
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
-            println!("LSP server didn't initialize: {:?}", res.err())
+            log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
         }
         Box::new(lsp_server)
     }
@@ -241,20 +242,16 @@ impl LSPServer for ClangdServer {
 
                     let mut new_children = HashSet::new();
                     let need_lsp = func_filter_c.is_match(s.as_str());
-                    //println!("{}", need_lsp);
                     if need_lsp {
-                        //println!("{}, {}", file_path, search_target.clone());
                         new_children = self.search_parent_single_document_filter(
                             func_filter_c.clone(),
                             parent_filter.clone(),
                             file_path.as_str(),
                         );
-                        //println!("{:?}", new_children);
                     }
                     for child in new_children {
                         connections.insert(child);
                     }
-                    //thread::sleep(time::Duration::from_secs(1));
                 }
             }
         } else {
@@ -273,20 +270,16 @@ impl LSPServer for ClangdServer {
 
                     let mut new_children = HashSet::new();
                     let need_lsp = func_filter_p.is_match(s.as_str());
-                    //println!("{}", need_lsp);
                     if need_lsp {
-                        //println!("{}, {}", file_path, search_target.clone());
                         new_children = self.search_child_single_document_filter(
                             func_filter_p.clone(),
                             child_filter.clone(),
                             file_path.as_str(),
                         );
-                        //println!("{:?}", new_children);
                     }
                     for child in new_children {
                         connections.insert(child);
                     }
-                    //thread::sleep(time::Duration::from_secs(1));
                 }
             }
         }
@@ -340,7 +333,7 @@ impl LSPServer for ClangdServer {
                                     document: file_path.clone()
                                 };
                                 func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
-                                println!("created forced node")
+                                //println!("created forced node")
                             } else {
                                 let node = ParentChildNode {
                                     function_name: name.clone(),
@@ -387,8 +380,8 @@ impl LSPServer for ClangdServer {
         let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
         match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
+            Some(DocumentSymbolResponse::Flat(token)) => {
+                log!(Level::Warn ,"unsupported symbols found");
             }
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
@@ -399,12 +392,10 @@ impl LSPServer for ClangdServer {
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            println!("{:?}", call_hierarchy_array[0].clone());
                             if call_hierarchy_array.len() > 0 {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
-                                println!("{:?}", outgoing_calls);
                                 for outgoing_call in outgoing_calls.unwrap().unwrap() {
                                     if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                         && file_filter_c.is_match(outgoing_call.to.uri.as_str())
@@ -422,7 +413,7 @@ impl LSPServer for ClangdServer {
                 }
             }
             None => {
-                println!("no symbols found");
+                log!(Level::Warn, "no symbols found");
             }
         }
 
@@ -451,13 +442,12 @@ impl LSPServer for ClangdServer {
 
         match doc_symbol {
             Some(DocumentSymbolResponse::Flat(_)) => {
-                println!("unsupported symbols found");
+                log!(Level::Warn ,"unsupported symbols found");
             }
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
-                        //println!("{}", func_name);
                         if func_filter.is_match(func_name.as_str()) {
                             let prep_call_hierarchy = self
                                 .lang_server
@@ -483,7 +473,7 @@ impl LSPServer for ClangdServer {
                 }
             }
             None => {
-                println!("no symbols found");
+                log!(Level::Warn, "no symbols found");
             }
         }
 
@@ -498,13 +488,12 @@ impl LSPServer for ClangdServer {
 
             match doc_symbol {
                 Some(DocumentSymbolResponse::Flat(_)) => {
-                    println!("unsupported symbols found");
+                    log!(Level::Warn ,"unsupported symbols found");
                 }
                 Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                     for symbol in doc_symbols {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
-                            //println!("{}", func_name);
                             if parent_name == func_name {
                                 let prep_call_hierarchy = self
                                     .lang_server
@@ -526,7 +515,7 @@ impl LSPServer for ClangdServer {
                     }
                 }
                 None => {
-                    println!("no symbols found");
+                    log!(Level::Warn, "no symbols found");
                 }
             }
         }
@@ -547,13 +536,12 @@ impl LSPServer for ClangdServer {
 
             match doc_symbol {
                 Some(DocumentSymbolResponse::Flat(_)) => {
-                    println!("unsupported symbols found");
+                    log!(Level::Warn ,"unsupported symbols found");
                 }
                 Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                     for symbol in doc_symbols {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
-                            //println!("{}", func_name);
                             if func_filter.is_match(func_name.as_str()) {
                                 result.insert(func_name.to_string());
                             }
@@ -561,7 +549,7 @@ impl LSPServer for ClangdServer {
                     }
                 }
                 None => {
-                    println!("no symbols found");
+                    log!(Level::Warn, "no symbols found");
                 }
             }
         }
