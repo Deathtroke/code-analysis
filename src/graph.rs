@@ -55,21 +55,6 @@ impl Graph {
             node_to: to,
         };
         self.edges.insert(edge);
-        self.clear_redundant_leaf_nodes();
-    }
-
-    fn clear_redundant_leaf_nodes(&mut self){
-        for edge in self.edges.clone() {
-            if edge.node_to.is_none(){
-                for check_edge in self.edges.clone() {
-                    if check_edge.node_to.is_some(){
-                        if check_edge.node_to.unwrap() == edge.node_from {
-                            self.edges.remove(&edge);
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
