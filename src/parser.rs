@@ -1,6 +1,6 @@
 use pest::Parser;
 use pest_derive::Parser;
-use pest::iterators::{Pair, Pairs};
+use pest::iterators::Pairs;
 use std::collections::{HashMap, HashSet};
 use std::string::String;
 use log::{log, Level};
@@ -8,7 +8,7 @@ use super::*;
 
 use regex::Regex;
 
-use crate::searcher::{ParentChildNode, FunctionNode, ForcedNode};
+use crate::searcher::{ParentChildNode, FunctionNode};
 
 #[derive(Parser)]
 #[grammar = "grammar.pest"]

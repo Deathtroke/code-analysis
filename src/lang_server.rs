@@ -419,11 +419,6 @@ impl LanguageServerLauncher {
         self
     }
 
-    pub fn languages(mut self, languages: Vec<String>) -> LanguageServerLauncher {
-        self.languages = languages;
-        self
-    }
-
     pub fn launch(self) -> Result<Box<dyn LanguageServer>, Error> {
         if ClangdLanguageServer::languages_supported(self.languages.clone()) {
             ClangdLanguageServer::new(self)

@@ -126,7 +126,7 @@ pub struct ParentChildNode {
 impl MatchFunctionEdge for ForcedNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
         #[allow(dead_code)]
-        if false {match_target; lsp_server; unimplemented!()}
+        if false { drop(match_target); drop(lsp_server); unimplemented!()}
         true
     }
     fn get_implementation(&self) -> String {
@@ -151,7 +151,6 @@ impl ClangdServer {
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server("/usr/bin/clangd".to_owned())
                 .project(project_path.to_owned())
-                //.languages(language_list)
                 .launch()
                 .expect("Failed to spawn clangd"),
             files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
