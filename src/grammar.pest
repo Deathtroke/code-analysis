@@ -1,6 +1,6 @@
 COMMENT = _{ "NB." ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{((" ")  | "\t")+}
-ident = @{ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")*}
+ident = @{(ASCII_ALPHA| "_") ~ (ASCII_ALPHANUMERIC | "_")*}
 regex = @{(ASCII_ALPHANUMERIC | "\\" | "." | "-" | "!" | "?" | "=" | ":" | "*" | "{" | "}" | "(" | ")" | "[" | "]" | "_")+}
 named_parameter = ${ident ~ "=\"" ~ regex ~ "\""}
 verb = ${ "@" ~ ident ~ ("(" ~ named_parameter ~ ("," ~ named_parameter)* ~ ")")?}
