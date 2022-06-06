@@ -297,11 +297,9 @@ impl PestParser {
                             HashMap::new(),
                             parent.document.clone().as_str()
                         );
-                        if children.len() > 0 {
-                            parents.insert(parent.clone());
-                            for child in children{
-                                self.graph.insert_edge(None, parent.clone().function_name.clone(), Some(child.1));
-                            }
+                        parents.insert(parent.clone());
+                        for child in children{
+                            self.graph.insert_edge(None, parent.clone().function_name.clone(), Some(child.1));
                         }
                     } else {
                         parents.insert(parent.clone());
