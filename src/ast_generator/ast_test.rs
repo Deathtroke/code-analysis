@@ -2,6 +2,8 @@ use std::borrow::Borrow;
 use pest::error::Error;
 // Note this useful idiom: importing names from outer (for mod tests) scope.
 use super::*;
+use crate::ast_generator::AstNode;
+
 
 #[test]
 fn test_ast_parser_successful() {
@@ -61,13 +63,13 @@ fn test_ast_parser_simple() {
 fn test_ast_parser_rebuild() {
     let input = r#"@foo{}"#;
     let ast = super::parse_ast(input);
-    let inner_statement = parser::AstNode::Statement { verb: vec![], scope: Box::new(None) };
-    let inner_statements = parser::AstNode::Statements(vec![inner_statement]);
-    let scope = parser::AstNode::Scope(Box::new(inner_statements));
-    let verb = parser::AstNode::Verb { ident: Box::new(parser::AstNode::Ident("foo".to_string())), named_parameter: vec![] };
-    let statement = parser::AstNode::Statement { verb: vec![verb], scope: Box::new(Some(scope)) };
-    let statements = parser::AstNode::Statements(vec![statement]);
-    let print = parser::AstNode::Print(Box::new(statements));
+    let inner_statement = AstNode::Statement { verb: vec![], scope: Box::new(None) };
+    let inner_statements = AstNode::Statements(vec![inner_statement]);
+    let scope = AstNode::Scope(Box::new(inner_statements));
+    let verb = AstNode::Verb { ident: Box::new(AstNode::Ident("foo".to_string())), named_parameter: vec![] };
+    let statement = AstNode::Statement { verb: vec![verb], scope: Box::new(Some(scope)) };
+    let statements = AstNode::Statements(vec![statement]);
+    let print = AstNode::Print(Box::new(statements));
     assert_eq!(format!("{:?}",ast.unwrap().last().unwrap().to_owned()),
                format!("{:?}",print));
 }

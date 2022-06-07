@@ -13,6 +13,7 @@ mod graph;
 mod lang_server;
 mod parser;
 mod searcher;
+mod ast_generator;
 
 #[derive(StructOpt, Debug)]
 #[structopt()]
@@ -50,7 +51,8 @@ fn try_main() -> anyhow::Result<()> {
         Box::new(std::io::stdout())
     };
 
-    let g: tabbycat::Graph = parser.graph.try_into()?;
+    //let g: tabbycat::Graph = parser.graph.try_into()?;
+    let g = parser.graph.graph_to_Dot();
     out.write(g.to_string().as_bytes())?;
 
     Ok(())

@@ -12,33 +12,22 @@ impl MockLSPServer {
 }
 
 impl LSPServer for MockLSPServer {
-    fn search_parent(&mut self, search_target: String) -> HashSet<String> {
-        if false {unimplemented!("{:?}", search_target)}
-        let parents: HashSet<String> =
-            HashSet::from(["parent1".to_string(), "parent2".to_string()]);
-
-        parents
-    }
-
-    fn search_child(&mut self, search_target: String) -> HashSet<String> {
-        if false {unimplemented!("{:?}", search_target)}
-        let mut children: HashSet<String> =
-            HashSet::from(["child1".to_string(), "child2".to_string()]);
-
-        children
-    }
-
     fn search_connection_filter(
         &mut self,
-        parent_filter: HashMap<String, String>,
-        child_filter: HashMap<String, String>,
+        parent_filter: String,
+        child_filter: String,
     ) -> HashSet<(String, String)> {
         let mut result: HashSet<(String, String)> = HashSet::new();
-        for parent in parent_filter.clone() {
-            for child in child_filter.clone() {
-                result.insert((parent.1.clone(), child.1.clone()));
-            }
+
+        if parent_filter.as_str() == "" {
+            result.insert(("parent1".to_string(), child_filter.clone()));
+            result.insert(("parent2".to_string(), child_filter.clone()));
         }
+        else {
+            result.insert((parent_filter.clone(), "child1".to_string()));
+            result.insert((parent_filter.clone(), "child2".to_string()));
+        }
+
         result
     }
 
@@ -51,6 +40,17 @@ impl LSPServer for MockLSPServer {
             if f.contains_key(&FilterName::Function) {
                 let forced = ForcedNode {
                     function_name: f.get(&FilterName::Function).unwrap().clone().as_str().to_string(),
+                    document: "".to_string()
+                };
+                result.insert(FunctionNode {
+                    function_name: forced.function_name.clone(),
+                    document: forced.document.clone(),
+                    match_strategy: Box::new(forced)
+                });
+            }
+            if f.contains_key(&FilterName::FunctionNameFromIdent) {
+                let forced = ForcedNode {
+                    function_name: f.get(&FilterName::FunctionNameFromIdent).unwrap().clone().as_str().to_string(),
                     document: "".to_string()
                 };
                 result.insert(FunctionNode {
@@ -98,6 +98,7 @@ impl LSPServer for MockLSPServer {
     fn find_functions_in_doc(
         &mut self,
         func_filter: Regex,
+        ident: Option<String>,
         document_name: &str,
     ) -> HashSet<String> {
         unimplemented!("{:?}, {:?}", func_filter, document_name)
@@ -112,8 +113,8 @@ fn test_parser_simple1() {
     assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), Some("func".to_string())),
-        ("parent2".to_string(), Some("func".to_string())),
+        ("parent1".to_string(), "func".to_string()),
+        ("parent2".to_string(), "func".to_string()),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
 }
@@ -125,8 +126,8 @@ fn test_parser_simple2() {
 
     assert_eq!(parser.parse(input).iter().nth(0).unwrap().function_name, "func".to_string());
     let graph_output = HashSet::from([
-        ("func".to_string(), Some("child1".to_string())),
-        ("func".to_string(), Some("child2".to_string())),
+        ("func".to_string(), "child1".to_string()),
+        ("func".to_string(), "child2".to_string()),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
 }
@@ -139,12 +140,12 @@ fn test_parser() {
     assert!(Regex::new("parent[12]").unwrap().is_match(parser.parse(input).iter().nth(1).unwrap().function_name.clone().as_str()));
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), Some("func".to_string())),
-        ("parent1".to_string(), Some("parent1".to_string())),
-        ("parent1".to_string(), Some("parent2".to_string())),
-        ("parent2".to_string(), Some("func".to_string())),
-        ("parent2".to_string(), Some("parent1".to_string())),
-        ("parent2".to_string(), Some("parent2".to_string())),
+        ("parent1".to_string(), "func".to_string()),
+        ("parent1".to_string(), "parent1".to_string()),
+        ("parent1".to_string(), "parent2".to_string()),
+        ("parent2".to_string(), "func".to_string()),
+        ("parent2".to_string(), "parent1".to_string()),
+        ("parent2".to_string(), "parent2".to_string()),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
     //let g : tabbycat::Graph = parser.graph.try_into().unwrap();
@@ -158,10 +159,10 @@ fn test_graph_only_node() {
     let mut parser = PestParser::new( MockLSPServer::new());
     assert_eq!(parser.parse(input).iter().nth(0).unwrap().function_name, "foo".to_string());
 
-    let graph_output = HashSet::from([
-        ("foo".to_string(), None),
-    ]);
-    assert_eq!(parser.graph.graph_to_tuple(), graph_output);
+    assert_eq!(parser.graph.graph_to_tuple(), HashSet::new());
+    for node in parser.graph.pet_graph.raw_nodes().to_owned(){
+        assert_eq!(node.weight, "foo".to_string());
+    }
     //let g : tabbycat::Graph = parser.graph.try_into().unwrap();
     //assert_eq!(g.to_string(), "This test is unusable")
 }
