@@ -103,6 +103,10 @@ impl LSPServer for MockLSPServer {
     ) -> HashSet<String> {
         unimplemented!("{:?}, {:?}", func_filter, document_name)
     }
+
+    fn close(&mut self) {
+        unimplemented!()
+    }
 }
 
 #[test]

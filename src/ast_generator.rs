@@ -144,5 +144,6 @@ fn build_ast_from_scope(pair: pest::iterators::Pair<Rule>) -> AstNode {
         _ => panic!("{:?}", pair),
     }
 }
+
 #[cfg(test)]
 mod ast_test;

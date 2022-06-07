@@ -243,7 +243,7 @@ impl ClangdLanguageServer {
 impl LanguageServer for ClangdLanguageServer {
     #[allow(deprecated)]
     fn initialize(&mut self) -> Result<InitializeResult, Error> {
-        self.request(Request::<Initialize>::new(InitializeParams {
+        let response = self.request(Request::<Initialize>::new(InitializeParams {
             process_id: Some(std::process::id() as u32),
             root_path: None,
             root_uri: Url::from_file_path(self.project.clone()).ok(),
@@ -298,7 +298,9 @@ impl LanguageServer for ClangdLanguageServer {
             workspace_folders: None,
             client_info: None,
             locale: Option::from("de".to_string()),
-        }))
+        }));
+        //println!("{:?}", response.as_ref().unwrap());
+        response
     }
 
     fn initialized(&mut self) -> Result<(), Error> {
@@ -362,7 +364,9 @@ impl LanguageServer for ClangdLanguageServer {
                 },
                 position,
             },
-            work_done_progress_params: Default::default(),
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
+            },
         });
         self.request(params)
     }
@@ -374,8 +378,12 @@ impl LanguageServer for ClangdLanguageServer {
         println!("send outgoing request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyOutgoingCalls>::new(CallHierarchyOutgoingCallsParams {
             item: call_hierarchy_item,
-            work_done_progress_params: Default::default(),
-            partial_result_params: Default::default(),
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
+            },
+            partial_result_params: PartialResultParams {
+                partial_result_token: None,
+            },
         });
         self.request(params)
     }
@@ -387,8 +395,12 @@ impl LanguageServer for ClangdLanguageServer {
         println!("send incoming request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyIncomingCalls>::new(CallHierarchyIncomingCallsParams {
             item: call_hierarchy_item,
-            work_done_progress_params: Default::default(),
-            partial_result_params: Default::default(),
+            work_done_progress_params: WorkDoneProgressParams {
+                work_done_token: None,
+            },
+            partial_result_params: PartialResultParams {
+                partial_result_token: None,
+            },
         });
         self.request(params)
     }

@@ -7,7 +7,6 @@ use tabbycat;
 
 use structopt;
 use structopt::StructOpt;
-use std::convert::TryInto;
 
 mod graph;
 mod lang_server;
@@ -52,8 +51,10 @@ fn try_main() -> anyhow::Result<()> {
     };
 
     //let g: tabbycat::Graph = parser.graph.try_into()?;
-    let g = parser.graph.graph_to_Dot();
+    let g = parser.graph.graph_to_dot();
     out.write(g.to_string().as_bytes())?;
+
+    parser.close_lsp();
 
     Ok(())
 }

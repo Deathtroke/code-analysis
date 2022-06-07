@@ -32,9 +32,10 @@ pub trait LSPServer {
         parent_filter: HashMap<String, String>,
         document_name: &str,
     ) -> HashSet<(String, String)>;
-   fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
+    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
     fn find_functions_in_doc(&mut self, func_filter: Regex, ident: Option<String>, document_name: &str)
         -> HashSet<String>;
+    fn close(&mut self);
 }
 
 fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String> {
@@ -242,7 +243,6 @@ impl LSPServer for ClangdServer {
                 ident = f.get(&FilterName::FunctionNameFromIdent).unwrap().to_string();
                 only_ident = true;
             }
-            println!("{}", ident);
 
             let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&FilterName::File) {
@@ -333,7 +333,7 @@ impl LSPServer for ClangdServer {
 
         match doc_symbol {
             Some(DocumentSymbolResponse::Flat(token)) => {
-                log!(Level::Warn ,"unsupported symbols found");
+                log!(Level::Warn ,"unsupported symbols found {:?}", token);
             }
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
@@ -344,10 +344,10 @@ impl LSPServer for ClangdServer {
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            if call_hierarchy_array.len() > 0 {
+                            for call_hierarchy_item in call_hierarchy_array{
                                 let outgoing_calls = self
                                     .lang_server
-                                    .call_hierarchy_item_outgoing(call_hierarchy_array[0].clone());
+                                    .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
                                 for outgoing_call in outgoing_calls.unwrap().unwrap() {
                                     if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                         && file_filter_c.is_match(outgoing_call.to.uri.as_str())
@@ -404,10 +404,10 @@ impl LSPServer for ClangdServer {
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
                             let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            if call_hierarchy_array.len() > 0 {
+                            for call_hierarchy_item in call_hierarchy_array {
                                 let incoming_calls = self
                                     .lang_server
-                                    .call_hierarchy_item_incoming(call_hierarchy_array[0].clone());
+                                    .call_hierarchy_item_incoming(call_hierarchy_item.clone());
                                 for incoming_call in incoming_calls.unwrap().unwrap() {
                                     if func_filter_c.is_match(incoming_call.from.name.as_str())
                                         && file_filter_c.is_match(incoming_call.from.uri.as_str())
@@ -514,5 +514,10 @@ impl LSPServer for ClangdServer {
             }
         }
         result
+    }
+
+    fn close(&mut self){
+        self.lang_server.shutdown();
+        self.lang_server.exit();
     }
 }

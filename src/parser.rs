@@ -221,6 +221,10 @@ impl PestParser {
             }
         }
     }
+
+    pub fn close_lsp(&mut self) {
+        self.lang_server.close();
+    }
 }
 
 #[cfg(test)]

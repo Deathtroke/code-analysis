@@ -1,8 +1,6 @@
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 use std::collections::HashSet;
-use petgraph::dot::{Config, Dot};
-use petgraph::prelude::EdgeRef;
 
 pub struct Graph {
     pub pet_graph: petgraph::Graph<String, ()>,
