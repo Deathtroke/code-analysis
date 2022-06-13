@@ -307,3 +307,13 @@ fn test_grammar_complex1() {
     }
     assert_eq!(i, 8);
 }
+
+
+#[test]
+fn ident_can_start_with_underscore() {
+    let input = r#"@__collect_inotify_mark"#;
+    let result = ast_generator::parse_grammar(input);
+    assert!(result.is_ok());
+
+    assert_eq!(result.unwrap().as_str(), "@__collect_inotify_mark");
+}
