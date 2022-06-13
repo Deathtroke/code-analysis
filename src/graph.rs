@@ -1,6 +1,7 @@
 use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 use std::collections::HashSet;
+use petgraph::graph::{NodeIndex, NodeIndices};
 
 pub struct Graph {
     pub pet_graph: petgraph::Graph<String, ()>,
@@ -19,7 +20,22 @@ impl Graph {
         result
     }
 
-    pub fn graph_to_dot(&self) -> String {
+    pub fn add_node(&mut self, node_name: String) -> NodeIndex {
+        let mut result_index = NodeIndex::new(0);
+        let mut node_exists = false;
+        for node in self.pet_graph.node_indices(){
+            if self.pet_graph.node_weight(node).unwrap().to_owned() == node_name {
+                result_index = node;
+                node_exists = true;
+            }
+        }
+        if !node_exists {
+            result_index = self.pet_graph.add_node(node_name);
+        }
+        result_index
+    }
+
+    pub fn graph_to_dot(&mut self) -> String {
         format!("{:?}",  petgraph::dot::Dot::new(&self.pet_graph.clone()))
     }
 }

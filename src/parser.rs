@@ -104,8 +104,8 @@ impl PestParser {
                     for child in child_names.to_owned(){
                         if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
-                            let a = self.graph.pet_graph.add_node(parent.function_name.clone());
-                            let b = self.graph.pet_graph.add_node(child.function_name.clone());
+                            let a = self.graph.add_node(parent.function_name.clone());
+                            let b = self.graph.add_node(child.function_name.clone());
                             self.graph.pet_graph.add_edge(a, b, ());
                         }
                     }
@@ -117,13 +117,13 @@ impl PestParser {
                         );
                         parents.insert(parent.clone());
                         for child in children{
-                            let a = self.graph.pet_graph.add_node(parent.clone().function_name.clone());
-                            let b = self.graph.pet_graph.add_node(child.1);
+                            let a = self.graph.add_node(parent.clone().function_name.clone());
+                            let b = self.graph.add_node(child.1);
                             self.graph.pet_graph.add_edge(a, b, ());
                         }
                     } else {
                         parents.insert(parent.clone());
-                        self.graph.pet_graph.add_node(parent.clone().function_name.clone());
+                        self.graph.add_node(parent.clone().function_name.clone());
                     }
                 }
             }
@@ -137,8 +137,8 @@ impl PestParser {
                     };
                     parents.insert(FunctionNode{ function_name: parent.0.clone(), document: "".to_string(), match_strategy: Box::new(node) });
 
-                    let a = self.graph.pet_graph.add_node(parent.0.clone());
-                    let b = self.graph.pet_graph.add_node(child.function_name.clone());
+                    let a = self.graph.add_node(parent.0.clone());
+                    let b = self.graph.add_node(child.function_name.clone());
                     self.graph.pet_graph.add_edge(a, b, ());
                 }
             }
