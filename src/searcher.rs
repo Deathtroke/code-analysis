@@ -18,7 +18,7 @@ pub trait LSPServer {
     ) -> HashSet<(String, String)>;
     fn find_func_name(
         &mut self,
-        filter: Vec<HashMap<parser::FilterName, Regex>>,
+        filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode>;
     fn search_child_single_document_filter(
         &mut self,
@@ -38,28 +38,11 @@ pub trait LSPServer {
     fn close(&mut self);
 }
 
-fn get_all_files_in_project(dir: String, project_path: String) -> Vec<String> {
-    let mut files: Vec<String> = Vec::new();
-    let paths = fs::read_dir(dir.clone()).unwrap();
-
-    for path in paths {
-        let path_str = path.as_ref().unwrap().path().to_str().unwrap().to_string();
-        if path.as_ref().unwrap().metadata().unwrap().is_dir() {
-            let mut subfolder = get_all_files_in_project(path_str, project_path.clone());
-            files.append(&mut subfolder);
-        } else {
-            if path_str.ends_with(".cpp") || path_str.ends_with(".c") {
-                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"), ""));
-            }
-        }
-    }
-    files
-}
-
 pub struct ClangdServer {
     pub lang_server: Box<dyn LanguageServer>,
     pub files_in_project: Vec<String>,
     pub project_path: String,
+    pub index_map: HashMap<String, Vec<String>>,
 }
 
 pub struct FunctionNode {
@@ -150,18 +133,135 @@ impl ClangdServer {
     pub fn new(project_path: String) -> Box<dyn LSPServer> {
         let mut lsp_server = Self {
             lang_server: lang_server::LanguageServerLauncher::new()
-                .server("/usr/bin/clangd".to_owned())
+                .server("/usr/bin/clangd-14".to_owned())
                 .project(project_path.to_owned())
                 .launch()
                 .expect("Failed to spawn clangd"),
-            files_in_project: get_all_files_in_project(project_path.clone(), project_path.clone()),
+            files_in_project: vec![],
             project_path,
+            index_map: HashMap::new(),
         };
+        lsp_server.files_in_project = lsp_server.get_all_files_in_project();
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
             log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
         }
         Box::new(lsp_server)
+    }
+
+    pub fn get_all_files_in_project(&mut self) -> Vec<String> {
+        let mut files: Vec<String> = Vec::new();
+        let path_to_index = self.project_path.clone() + "/.cache/clangd/index";
+        let index_dir  = fs::read_dir(path_to_index.clone());
+        let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
+
+
+        if index_dir.is_ok() {
+            let mut index_file_names: Vec<String> = vec![];
+            for file in index_dir.unwrap() {
+                let mut file_str = file.as_ref().unwrap().path().to_str().unwrap().to_owned();
+                file_str = file_str.replace(&(path_to_index.clone() + "/"), "");
+                file_str = file_str[..file_str.find(".").unwrap()].to_owned();
+                //println!("{}", file.as_ref().unwrap().path().to_str().unwrap().to_owned());
+                index_file_names.push(file_str);
+            }
+            files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
+
+            let mut i = 0;
+            for file in files.clone() {
+                i+=1;
+                let mut functions:Vec<String> = vec![];
+
+                //println!("{} {}", i, file);
+
+                if i > 30 {
+                    //break;
+                    i = 0;
+                    println!("indexing project, please wait");
+                    //println!("{:?}", self.lang_server.shutdown());
+                    let shutdown_res = self.lang_server.exit();
+                    if shutdown_res.is_err() {
+                        println!("{:?}", shutdown_res.err());
+                    }
+                    let new_lsp = lang_server::LanguageServerLauncher::new()
+                        .server("/usr/bin/clangd-14".to_owned())
+                        .project(self.project_path.to_owned())
+                        .launch()
+                        .expect("Failed to spawn clangd");
+                    self.lang_server = new_lsp;
+
+                    let init_res = self.lang_server.initialize();
+                    if init_res.is_err() {
+                        println!("{:?}", init_res.err());
+                    }
+                }
+                let document_res = self.lang_server.document_open(file.as_str());
+                if document_res.is_ok() {
+                    let document = document_res.unwrap();
+                    let doc_symbol = self.lang_server.document_symbol(&document);
+                    if doc_symbol.is_ok() {
+                        match doc_symbol.unwrap() {
+                            Some(DocumentSymbolResponse::Flat(_)) => {
+                                log!(Level::Warn ,"unsupported symbols found");
+                            }
+                            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                                for symbol in doc_symbols {
+                                    if symbol.kind == SymbolKind::FUNCTION {
+                                        functions.push(symbol.name);
+                                    }
+                                }
+                            }
+                            None => {
+                                log!(Level::Warn, "no symbols found");
+                            }
+                        }
+                    }
+                }
+                index_map.insert(file, functions);
+            }
+
+        } else {
+            files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
+
+        }
+        self.index_map = index_map;
+        files
+    }
+
+    fn get_files_in_dir(&self, dir: String, project_path: String, index_file_name: Option<Vec<String>>) -> Vec<String> {
+        let mut files: Vec<String> = Vec::new();
+
+        let paths = fs::read_dir(dir.clone()).unwrap();
+
+        for path in paths {
+            let path_str = path.as_ref().unwrap().path().to_str().unwrap().to_string();
+            if path.as_ref().unwrap().metadata().unwrap().is_dir() {
+                let mut subfolder = self.get_files_in_dir(path_str, project_path.clone(), index_file_name.clone());
+                files.append(&mut subfolder);
+            } else {
+                if index_file_name.clone().is_some() {
+                    let mut name = path_str.replace(&(project_path.clone().as_str().to_owned() + "/"), "");
+                    while name.find("/").is_some() {
+                        name = name[(name.find("/").unwrap()+1)..].to_owned();
+                    }
+                    if name.find(".").is_some() {
+                        name = name[..name.find(".").unwrap()].to_owned();
+
+                        if index_file_name.clone().unwrap().contains(&name){
+                            if path_str.ends_with(".cpp") || path_str.ends_with(".c") {
+                                files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"), ""));
+                            }
+                        }
+                    }
+
+                } else {
+                    if path_str.ends_with(".cpp") || path_str.ends_with(".c") {
+                        files.push(path_str.replace(&(project_path.clone().as_str().to_owned() + "/"), ""));
+                    }
+                }
+            }
+        }
+        files
     }
 }
 
@@ -348,15 +448,20 @@ impl LSPServer for ClangdServer {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
-                                for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(outgoing_call.to.name.as_str())
-                                        && file_filter_c.is_match(outgoing_call.to.uri.as_str())
-                                    {
-                                        result.insert((
-                                            func_name.clone(),
-                                            outgoing_call.to.name.to_string(),
-                                        ));
+                                if outgoing_calls.is_ok() {
+                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                        if func_filter_c.is_match(outgoing_call.to.name.as_str())
+                                            && file_filter_c.is_match(outgoing_call.to.uri.as_str())
+                                        {
+                                            result.insert((
+                                                func_name.clone(),
+                                                outgoing_call.to.name.to_string(),
+                                            ));
+                                        }
                                     }
+                                } else {
+                                    println!("{:?}", outgoing_calls.as_ref());
+                                    println!("{:?}", self.index_map);
                                 }
                             }
                         }

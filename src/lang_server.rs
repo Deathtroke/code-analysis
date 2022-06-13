@@ -137,6 +137,7 @@ impl ClangdLanguageServer {
             //"--cross-file-rename".to_owned(),
             format!("--compile-commands-dir=\"{}\"", project_path).to_owned(),
             //project_path,
+            "--completion-style=detailed".to_owned(),
         ]
     }
 
