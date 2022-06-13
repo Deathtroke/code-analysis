@@ -509,6 +509,18 @@ impl LSPServer for ClangdServer {
                                     }
                                 } else {
                                     println!("{:?}", outgoing_calls.as_ref());
+                                    let doc_text = document.text.clone();
+                                    let doc_lines: Vec<&str> = doc_text.split("\n").collect();
+                                    let start: usize = (symbol.range.start.line + 1) as usize;
+                                    let end: usize = symbol.range.end.line as usize;
+                                    let function_data = doc_lines[start..end].concat();
+                                    for file in self.index_map.clone() {
+                                        for function_name in file.1 {
+                                            if function_data.contains(&function_name){
+                                                result.insert((func_name.clone(), function_name.clone()));
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
