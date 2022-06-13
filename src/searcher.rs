@@ -1,5 +1,5 @@
 use crate::lang_server::LanguageServer;
-use crate::{lang_server, parser};
+use crate::lang_server;
 use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -8,6 +8,8 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use log::{Level, log};
+use serde::Serialize;
+use serde_json::Value;
 use crate::parser::FilterName;
 
 pub trait LSPServer {
@@ -153,8 +155,6 @@ impl ClangdServer {
         let mut files: Vec<String> = Vec::new();
         let path_to_index = self.project_path.clone() + "/.cache/clangd/index";
         let index_dir  = fs::read_dir(path_to_index.clone());
-        let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
-
 
         if index_dir.is_ok() {
             let mut index_file_names: Vec<String> = vec![];
@@ -167,6 +167,55 @@ impl ClangdServer {
             }
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
 
+            self.index_map = self.check_index_file(files.clone());
+
+        } else {
+            files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
+
+        }
+        files
+    }
+
+    fn check_index_file(&mut self, files: Vec<String>) -> HashMap<String, Vec<String>> {
+        let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
+
+        let path = self.project_path.clone() + "/.cache/index.json";
+        let mut needs_indexing = false;
+        let mut file =  File::open(&path);
+        if file.is_err() {
+            needs_indexing = true;
+        } else {
+            let mut s = String::new();
+            match file.unwrap().read_to_string(&mut s) {
+                Err(why) => panic!("could not read: {}", why),
+                Ok(_) => {}
+            }
+
+            let json = serde_json::from_str::<Value>(s.as_str());
+            if json.is_err() {
+                needs_indexing = true;
+            } else {
+                let json_map = json.unwrap().as_object().unwrap().to_owned();
+                if json_map.len() == files.len() {
+                    for file in json_map{
+                        if files.contains(&file.0) {
+                            let mut functions: Vec<String> = vec![];
+                            let symbols = file.1.as_array().unwrap().to_owned();
+                            for symbol in symbols {
+                                functions.push(symbol.to_string().replace("\"", ""));
+                            }
+                            index_map.insert(file.0, functions.clone());
+                        } else {
+                            needs_indexing = true;
+                        }
+                    }
+                } else {
+                    needs_indexing = true;
+                }
+            }
+
+        }
+        if needs_indexing {
             let mut i = 0;
             for file in files.clone() {
                 i+=1;
@@ -220,12 +269,11 @@ impl ClangdServer {
                 index_map.insert(file, functions);
             }
 
-        } else {
-            files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
-
+            let new_json = serde_json::to_string(&index_map).unwrap();
+            let mut file_ref = File::create(path).expect("create failed");
+            file_ref.write_all(new_json.as_bytes()).expect("write failed");
         }
-        self.index_map = index_map;
-        files
+        index_map
     }
 
     fn get_files_in_dir(&self, dir: String, project_path: String, index_file_name: Option<Vec<String>>) -> Vec<String> {
@@ -461,7 +509,6 @@ impl LSPServer for ClangdServer {
                                     }
                                 } else {
                                     println!("{:?}", outgoing_calls.as_ref());
-                                    println!("{:?}", self.index_map);
                                 }
                             }
                         }
