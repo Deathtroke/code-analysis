@@ -501,10 +501,12 @@ impl LSPServer for ClangdServer {
                                         if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                             && file_filter_c.is_match(outgoing_call.to.uri.as_str())
                                         {
-                                            result.insert((
-                                                func_name.clone(),
-                                                outgoing_call.to.name.to_string(),
-                                            ));
+                                            if outgoing_call.to.kind == SymbolKind::FUNCTION {
+                                                result.insert((
+                                                    func_name.clone(),
+                                                    outgoing_call.to.name.to_string(),
+                                                ));
+                                            }
                                         }
                                     }
                                 } else {
@@ -576,10 +578,12 @@ impl LSPServer for ClangdServer {
                                     if func_filter_c.is_match(incoming_call.from.name.as_str())
                                         && file_filter_c.is_match(incoming_call.from.uri.as_str())
                                     {
-                                        result.insert((
-                                            incoming_call.from.name.to_string(),
-                                            func_name.clone(),
-                                        ));
+                                        if incoming_call.from.kind == SymbolKind::FUNCTION {
+                                            result.insert((
+                                                incoming_call.from.name.to_string(),
+                                                func_name.clone(),
+                                            ));
+                                        }
                                     }
                                 }
                             }
