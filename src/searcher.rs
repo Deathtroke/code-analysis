@@ -496,8 +496,11 @@ impl LSPServer for ClangdServer {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
+                                let mut unsuccessful_response = false;
                                 if outgoing_calls.is_ok() {
+                                    unsuccessful_response = true;
                                     for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                        unsuccessful_response = false;
                                         if func_filter_c.is_match(outgoing_call.to.name.as_str())
                                             && file_filter_c.is_match(outgoing_call.to.uri.as_str())
                                         {
@@ -510,7 +513,9 @@ impl LSPServer for ClangdServer {
                                         }
                                     }
                                 } else {
-                                    println!("{:?}", outgoing_calls.as_ref());
+                                    unsuccessful_response = true
+                                }
+                                if unsuccessful_response {
                                     let doc_text = document.text.clone();
                                     let doc_lines: Vec<&str> = doc_text.split("\n").collect();
                                     let start: usize = (symbol.range.start.line + 1) as usize;
