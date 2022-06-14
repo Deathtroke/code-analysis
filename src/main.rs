@@ -23,6 +23,8 @@ pub struct Opt {
     output: Option<String>,
     #[structopt(short = "p", long = "project-path")]
     project_path: String,
+    #[structopt(short = "l", long = "lsp-path", default_value = "/usr/bin/clangd")]
+    lsp_path: String,
 }
 
 fn main() {
@@ -39,7 +41,7 @@ fn try_main() -> anyhow::Result<()> {
     let opt = Opt::from_args();
 
     //let lsp_server: searcher::LSPServer = searcher::LSPServer::new(opt.project_path);
-    let lsp_server = searcher::ClangdServer::new(opt.project_path.clone());
+    let lsp_server = searcher::ClangdServer::new(opt.project_path.clone(), opt.lsp_path.clone());
     let mut parser = parser::PestParser::new(lsp_server);
 
     parser.parse(opt.query.as_str());

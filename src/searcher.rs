@@ -132,10 +132,10 @@ impl MatchFunctionEdge for ParentChildNode {
 }
 
 impl ClangdServer {
-    pub fn new(project_path: String) -> Box<dyn LSPServer> {
+    pub fn new(project_path: String, clangd_path: String) -> Box<dyn LSPServer> {
         let mut lsp_server = Self {
             lang_server: lang_server::LanguageServerLauncher::new()
-                .server("/usr/bin/clangd-14".to_owned())
+                .server(clangd_path.to_owned())
                 .project(project_path.to_owned())
                 .launch()
                 .expect("Failed to spawn clangd"),
@@ -143,7 +143,7 @@ impl ClangdServer {
             project_path,
             index_map: HashMap::new(),
         };
-        lsp_server.files_in_project = lsp_server.get_all_files_in_project();
+        lsp_server.files_in_project = lsp_server.get_all_files_in_project(clangd_path);
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
             log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
@@ -151,7 +151,7 @@ impl ClangdServer {
         Box::new(lsp_server)
     }
 
-    pub fn get_all_files_in_project(&mut self) -> Vec<String> {
+    pub fn get_all_files_in_project(&mut self, clangd_path: String) -> Vec<String> {
         let mut files: Vec<String> = Vec::new();
         let path_to_index = self.project_path.clone() + "/.cache/clangd/index";
         let index_dir  = fs::read_dir(path_to_index.clone());
@@ -167,8 +167,7 @@ impl ClangdServer {
             }
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
 
-            self.index_map = self.check_index_file(files.clone());
-
+            self.index_map = self.check_index_file(files.clone(), clangd_path);
         } else {
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
 
@@ -176,7 +175,7 @@ impl ClangdServer {
         files
     }
 
-    fn check_index_file(&mut self, files: Vec<String>) -> HashMap<String, Vec<String>> {
+    fn check_index_file(&mut self, files: Vec<String>, clangd_path: String) -> HashMap<String, Vec<String>> {
         let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
 
         let path = self.project_path.clone() + "/.cache/index.json";
@@ -233,7 +232,7 @@ impl ClangdServer {
                         println!("{:?}", shutdown_res.err());
                     }
                     let new_lsp = lang_server::LanguageServerLauncher::new()
-                        .server("/usr/bin/clangd-14".to_owned())
+                        .server(clangd_path.to_owned())
                         .project(self.project_path.to_owned())
                         .launch()
                         .expect("Failed to spawn clangd");
