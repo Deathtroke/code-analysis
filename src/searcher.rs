@@ -10,7 +10,7 @@ use std::io::prelude::*;
 use log::{Level, log};
 use serde::Serialize;
 use serde_json::Value;
-use crate::parser::FilterName;
+use crate::analyzer::FilterName;
 
 pub trait LSPServer {
     fn search_connection_filter(
@@ -216,16 +216,17 @@ impl ClangdServer {
         }
         if needs_indexing {
             let mut i = 0;
+            let mut i_total = 0;
             for file in files.clone() {
-                i+=1;
+                i += 1; i_total += 1;
                 let mut functions:Vec<String> = vec![];
 
                 //println!("{} {}", i, file);
 
-                if i > 30 {
+                if i >= 10 {
                     //break;
                     i = 0;
-                    println!("indexing project, please wait");
+                    println!("indexing project, please wait ({}/{})", i_total, files.clone().len());
                     //println!("{:?}", self.lang_server.shutdown());
                     let shutdown_res = self.lang_server.exit();
                     if shutdown_res.is_err() {
@@ -689,7 +690,7 @@ impl LSPServer for ClangdServer {
     }
 
     fn close(&mut self){
-        self.lang_server.shutdown();
-        self.lang_server.exit();
+        log!(Level::Info, "{:?}", self.lang_server.shutdown());
+        log!(Level::Info, "{:?}", self.lang_server.exit());
     }
 }

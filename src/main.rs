@@ -10,7 +10,7 @@ use structopt::StructOpt;
 
 mod graph;
 mod lang_server;
-mod parser;
+mod analyzer;
 mod searcher;
 mod ast_generator;
 
@@ -42,7 +42,7 @@ fn try_main() -> anyhow::Result<()> {
 
     //let lsp_server: searcher::LSPServer = searcher::LSPServer::new(opt.project_path);
     let lsp_server = searcher::ClangdServer::new(opt.project_path.clone(), opt.lsp_path.clone());
-    let mut parser = parser::PestParser::new(lsp_server);
+    let mut parser = analyzer::Analyzer::new(lsp_server);
 
     parser.parse(opt.query.as_str());
 
@@ -52,7 +52,7 @@ fn try_main() -> anyhow::Result<()> {
         Box::new(std::io::stdout())
     };
 
-    //let g: tabbycat::Graph = parser.graph.try_into()?;
+    //let g: tabbycat::Graph = analyzer.graph.try_into()?;
     let g = parser.graph.graph_to_dot();
     out.write(g.to_string().as_bytes())?;
 

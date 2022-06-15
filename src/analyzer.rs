@@ -8,7 +8,7 @@ use regex::Regex;
 use crate::ast_generator::AstNode;
 use crate::searcher::{ParentChildNode, FunctionNode};
 
-pub struct PestParser {
+pub struct Analyzer {
     pub graph : graph::Graph,
     lang_server : Box<dyn searcher::LSPServer>,
     //global_vars :HashSet<(String, HashSet<(String, String)>)>,
@@ -24,9 +24,9 @@ pub enum FilterName {
 }
 
 
-impl PestParser {
-    pub fn new(lsp_server: Box<dyn searcher::LSPServer>) -> PestParser {
-        let p = PestParser {
+impl Analyzer {
+    pub fn new(lsp_server: Box<dyn searcher::LSPServer>) -> Analyzer {
+        let p = Analyzer {
             graph: graph::Graph {
                 pet_graph: petgraph::Graph::new(),
             },
@@ -35,13 +35,12 @@ impl PestParser {
         p
     }
 
-    pub fn parse(&mut self, input: &str) -> HashSet<FunctionNode>{
+    pub fn parse(&mut self, input: &str){
         let ast_result = ast_generator::parse_ast(input);
         if ast_result.is_ok() {
-            self.interpret_statements(ast_result.unwrap())
+            self.interpret_statements(ast_result.unwrap());
         } else {
             log!(Level::Error, "unable to parse input: {:?}", ast_result.err());
-            HashSet::new()
         }
     }
 
@@ -228,4 +227,4 @@ impl PestParser {
 }
 
 #[cfg(test)]
-mod parser_test;
+mod analyzer_test;
