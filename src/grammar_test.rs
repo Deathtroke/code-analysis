@@ -10,41 +10,49 @@ fn test_grammar_simple1() {
     let input = r#"{@foo}"#;
     let pair: Pair<ast_generator::Rule> = ast_generator::parse_grammar(input).unwrap().next().unwrap();
     let mut i = 0;
-    let inner_pair =  pair.into_inner().last().unwrap();
+    let inner_pair =  pair.clone().into_inner().last().unwrap();
+    let mut statement = pair.clone();
     match inner_pair.as_rule() {
         ast_generator::Rule::statement => {
-            let statement = inner_pair.into_inner().last().unwrap();
-            match statement.as_rule() {
-                ast_generator::Rule::scope => {
-                    let scope = statement.into_inner().last().unwrap();
-                    match scope.as_rule() {
-                        ast_generator::Rule::statements => {
-                            let statements2 = scope.into_inner().last().unwrap();
-                            match statements2.as_rule() {
-                                ast_generator::Rule::statement => {
-                                    let statement2 = statements2.into_inner().last().unwrap();
-                                    match statement2.as_rule() {
-                                        ast_generator::Rule::verb => {
-                                            i += 1;
-                                            assert_eq!(
-                                                statement2.as_str(),
-                                                "@foo"
-                                            );
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
+            statement = inner_pair.into_inner().last().unwrap();
         }
         _ => {}
     }
+
+    let mut scope = pair.clone();
+    match statement.clone().as_rule() {
+        ast_generator::Rule::scope => {
+            scope = statement.clone().into_inner().last().unwrap();
+        }
+        _ => {}
+    }
+
+    let mut statements = pair.clone();
+    match scope.as_rule() {
+        ast_generator::Rule::statements => {
+            statements = scope.into_inner().last().unwrap();
+        }
+        _ => {}
+    }
+
+    match statements.as_rule() {
+        ast_generator::Rule::statement => {
+            statement = statements.into_inner().last().unwrap();
+        }
+        _ => {}
+    }
+
+    match statement.as_rule() {
+        ast_generator::Rule::verb => {
+            i += 1;
+            assert_eq!(
+                statement.as_str(),
+                "@foo"
+            );
+        }
+        _ => {}
+    }
+
     assert_eq!(i, 1);
 }
 
@@ -86,7 +94,7 @@ fn test_grammar1() {
     let pair: Pair<ast_generator::Rule> = ast_generator::parse_grammar(input).unwrap().next().unwrap();
     let mut i = 0;
     let inner_pair = pair.clone().into_inner().last().unwrap();
-    let mut statements2 = pair;
+    let mut scope = pair.clone();
     match inner_pair.as_rule() {
         ast_generator::Rule::statement => {
             for statement in inner_pair.into_inner() {
@@ -96,17 +104,19 @@ fn test_grammar1() {
                         assert_eq!(statement.as_str(), "@foo");
                     }
                     ast_generator::Rule::scope => {
-                        let scope = statement.into_inner().last().unwrap();
-                        match scope.as_rule() {
-                            ast_generator::Rule::statements => {
-                                statements2 = scope.into_inner().nth(0).unwrap();
-                            }
-                            _ => {}
-                        }
+                        scope = statement.into_inner().last().unwrap();
                     }
                     _ => {}
                 }
             }
+        }
+        _ => {}
+    }
+
+    let mut statements2 = pair.clone();
+    match scope.as_rule() {
+        ast_generator::Rule::statements => {
+            statements2 = scope.into_inner().nth(0).unwrap();
         }
         _ => {}
     }
@@ -145,7 +155,7 @@ fn test_grammar2() {
     let pair: Pair<ast_generator::Rule> = ast_generator::parse_grammar(input).unwrap().next().unwrap();
     let mut i = 0;
     let inner_pair = pair.clone().into_inner().last().unwrap();
-    let mut statements2 = pair;
+    let mut scope = pair.clone();
     match inner_pair.as_rule() {
         ast_generator::Rule::statement => {
             for statement in inner_pair.into_inner() {
@@ -159,13 +169,7 @@ fn test_grammar2() {
                         }
                     }
                     ast_generator::Rule::scope => {
-                        let scope = statement.into_inner().last().unwrap();
-                        match scope.as_rule() {
-                            ast_generator::Rule::statements => {
-                                statements2 = scope.into_inner().last().unwrap();
-                            }
-                            _ => {}
-                        }
+                        scope = statement.into_inner().last().unwrap();
                     }
                     _ => {}
                 }
@@ -174,9 +178,17 @@ fn test_grammar2() {
         _ => {}
     }
 
-    match statements2.as_rule() {
+    let mut statements = pair;
+    match scope.as_rule() {
+        ast_generator::Rule::statements => {
+            statements = scope.into_inner().last().unwrap();
+        }
+        _ => {}
+    }
+
+    match statements.as_rule() {
         ast_generator::Rule::statement => {
-            for statement2 in statements2.into_inner() {
+            for statement2 in statements.into_inner() {
                 match statement2.as_rule() {
                     ast_generator::Rule::verb => {
                         i += 1;
@@ -214,8 +226,8 @@ fn test_grammar_complex1() {
     @foo"#;
     let pair: Pair<ast_generator::Rule> = ast_generator::parse_grammar(input).unwrap().next().unwrap();
     let mut i = 0;
-    let mut statements2 = pair.clone().into_inner();
-    for inner_pair in pair.into_inner() {
+    let mut scope = pair.clone();
+    for inner_pair in pair.clone().into_inner() {
         match inner_pair.as_rule() {
             ast_generator::Rule::statement => {
                 for statement in inner_pair.into_inner() {
@@ -235,14 +247,7 @@ fn test_grammar_complex1() {
                             }
                         }
                         ast_generator::Rule::scope => {
-                            for scope in statement.into_inner() {
-                                match scope.as_rule() {
-                                    ast_generator::Rule::statements => {
-                                        statements2 = scope.into_inner();
-                                    }
-                                    _ => {}
-                                }
-                            }
+                            scope = statement.into_inner().last().unwrap();
                         }
                         _ => {}
                     }
@@ -250,6 +255,14 @@ fn test_grammar_complex1() {
             }
             _ => {}
         }
+    }
+
+    let mut statements2 = pair.clone().into_inner();
+    match scope.as_rule() {
+        ast_generator::Rule::statements => {
+            statements2 = scope.into_inner();
+        }
+        _ => {}
     }
 
     let mut verb_nr = 0;
