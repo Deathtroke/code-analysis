@@ -1,7 +1,5 @@
-use serde::ser::{SerializeSeq, SerializeStruct};
-use serde::{Serialize, Serializer};
 use std::collections::HashSet;
-use petgraph::graph::{NodeIndex, NodeIndices};
+use petgraph::graph::NodeIndex;
 
 pub struct Graph {
     pub pet_graph: petgraph::Graph<String, ()>,

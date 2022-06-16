@@ -3,7 +3,6 @@ use lsp_types::notification::{DidOpenTextDocument, Exit, Initialized};
 use lsp_types::request::Request as LspRequest;
 use lsp_types::request::{DocumentSymbolRequest, Initialize, Shutdown};
 use lsp_types::*;
-use tabbycat;
 
 use structopt;
 use structopt::StructOpt;

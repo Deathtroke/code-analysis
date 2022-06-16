@@ -300,7 +300,6 @@ impl LanguageServer for ClangdLanguageServer {
             client_info: None,
             locale: Option::from("de".to_string()),
         }));
-        //println!("{:?}", response.as_ref().unwrap());
         response
     }
 
@@ -376,7 +375,6 @@ impl LanguageServer for ClangdLanguageServer {
         &mut self,
         call_hierarchy_item: CallHierarchyItem,
     ) -> Result<Option<Vec<CallHierarchyOutgoingCall>>, Error> {
-        println!("send outgoing request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyOutgoingCalls>::new(CallHierarchyOutgoingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: WorkDoneProgressParams {
@@ -393,7 +391,6 @@ impl LanguageServer for ClangdLanguageServer {
         &mut self,
         call_hierarchy_item: CallHierarchyItem,
     ) -> Result<Option<Vec<CallHierarchyIncomingCall>>, Error> {
-        println!("send incoming request for {:?}", call_hierarchy_item.name);
         let params = Request::<CallHierarchyIncomingCalls>::new(CallHierarchyIncomingCallsParams {
             item: call_hierarchy_item,
             work_done_progress_params: WorkDoneProgressParams {

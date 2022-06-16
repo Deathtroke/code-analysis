@@ -8,7 +8,6 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
 use log::{Level, log};
-use serde::Serialize;
 use serde_json::Value;
 use crate::analyzer::FilterName;
 
@@ -152,7 +151,7 @@ impl ClangdServer {
     }
 
     pub fn get_all_files_in_project(&mut self, clangd_path: String) -> Vec<String> {
-        let mut files: Vec<String> = Vec::new();
+        let files: Vec<String>;
         let path_to_index = self.project_path.clone() + "/.cache/clangd/index";
         let index_dir  = fs::read_dir(path_to_index.clone());
 
@@ -162,7 +161,6 @@ impl ClangdServer {
                 let mut file_str = file.as_ref().unwrap().path().to_str().unwrap().to_owned();
                 file_str = file_str.replace(&(path_to_index.clone() + "/"), "");
                 file_str = file_str[..file_str.find(".").unwrap()].to_owned();
-                //println!("{}", file.as_ref().unwrap().path().to_str().unwrap().to_owned());
                 index_file_names.push(file_str);
             }
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
@@ -180,7 +178,7 @@ impl ClangdServer {
 
         let path = self.project_path.clone() + "/.cache/index.json";
         let mut needs_indexing = false;
-        let mut file =  File::open(&path);
+        let file =  File::open(&path);
         if file.is_err() {
             needs_indexing = true;
         } else {
@@ -217,20 +215,18 @@ impl ClangdServer {
         if needs_indexing {
             let mut i = 0;
             let mut i_total = 0;
+            println!("start indexing, there should be a message displaying the progress every coupe of seconds, please restart the program if the messages stop unexpectedly");
             for file in files.clone() {
                 i += 1; i_total += 1;
                 let mut functions:Vec<String> = vec![];
-
-                //println!("{} {}", i, file);
 
                 if i >= 10 {
                     //break;
                     i = 0;
                     println!("indexing project, please wait ({}/{})", i_total, files.clone().len());
-                    //println!("{:?}", self.lang_server.shutdown());
                     let shutdown_res = self.lang_server.exit();
                     if shutdown_res.is_err() {
-                        println!("{:?}", shutdown_res.err());
+                        log!(Level::Error, "{:?}", shutdown_res.err());
                     }
                     let new_lsp = lang_server::LanguageServerLauncher::new()
                         .server(clangd_path.to_owned())
@@ -496,7 +492,7 @@ impl LSPServer for ClangdServer {
                                 let outgoing_calls = self
                                     .lang_server
                                     .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
-                                let mut unsuccessful_response = false;
+                                let mut unsuccessful_response;
                                 if outgoing_calls.is_ok() {
                                     unsuccessful_response = true;
                                     for outgoing_call in outgoing_calls.unwrap().unwrap() {

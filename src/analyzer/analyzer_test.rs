@@ -70,7 +70,7 @@ impl LSPServer for MockLSPServer {
         document_name: &str,
     ) -> HashSet<(String, String)> {
         if false {unimplemented!("{:?} {:?}", child_filter, document_name)}
-        let mut children: HashSet<(String,String)> =
+        let children: HashSet<(String,String)> =
             HashSet::from([(func_filter.to_string(), "child1".to_string()), (func_filter.to_string(), "child2".to_string())]);
 
         children
@@ -83,7 +83,7 @@ impl LSPServer for MockLSPServer {
         document_name: &str,
     ) -> HashSet<(String, String)> {
         if false {unimplemented!("{:?} {:?}", parent_filter, document_name)}
-        let mut parents: HashSet<(String,String)> =
+        let parents: HashSet<(String,String)> =
             HashSet::from([("parent1".to_string(), func_filter.to_string()), ("parent2".to_string(), func_filter.to_string())]);
 
         parents
@@ -101,7 +101,7 @@ impl LSPServer for MockLSPServer {
         ident: Option<String>,
         document_name: &str,
     ) -> HashSet<String> {
-        unimplemented!("{:?}, {:?}", func_filter, document_name)
+        unimplemented!("{:?}, {:?}, {:?}", func_filter, document_name, ident)
     }
 
     fn close(&mut self) {
