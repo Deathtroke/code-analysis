@@ -38,7 +38,14 @@ impl Analyzer {
     pub fn parse(&mut self, input: &str){
         let ast_result = ast_generator::parse_ast(input);
         if ast_result.is_ok() {
-            self.interpret_statements(ast_result.unwrap());
+            for ast in ast_result.unwrap() {
+                match ast {
+                    AstNode::Statements(statements) => {
+                        self.interpret_statements(statements);
+                    }
+                    _ => {}
+                }
+            }
         } else {
             log!(Level::Error, "unable to parse input: {:?}", ast_result.err());
         }
@@ -46,24 +53,10 @@ impl Analyzer {
 
     fn interpret_statements(&mut self, ast_nodes: Vec<AstNode>) -> HashSet<FunctionNode> {
         let mut function_names: HashSet<FunctionNode> = HashSet::new();
-        //let mut overwrite_name : String = "".to_string();
-
 
         for ast in ast_nodes {
-            match ast {
-                AstNode::Print(print) => {
-                    match *print {
-                        AstNode::Statements(statements) => {
-                            function_names = self.interpret_statements(statements);
+            function_names = self.interpret_statement(ast, function_names.clone());
 
-                        },
-                        _ => {}
-                    }
-                }
-                _ => {
-                    function_names = self.interpret_statement(ast, function_names);
-                }
-            }
         }
         function_names
     }
