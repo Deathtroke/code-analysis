@@ -261,7 +261,12 @@ impl ClangdServer {
                             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                                 for symbol in doc_symbols {
                                     if symbol.kind == SymbolKind::FUNCTION {
-                                        functions.push(symbol.name);
+                                        let mut func_name = symbol.name;
+                                        while func_name.starts_with('_'){
+                                            func_name = func_name.strip_prefix(&"_".to_string()).unwrap().to_string();
+                                        }
+
+                                        functions.push(func_name);
                                     }
                                 }
                             }
