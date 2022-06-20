@@ -47,7 +47,7 @@ impl Analyzer {
                 }
             }
         } else {
-            log!(Level::Error, "unable to parse input: {:?}", ast_result.err());
+            eprintln!("unable to parse input: {:?}", ast_result.err());
         }
     }
 
