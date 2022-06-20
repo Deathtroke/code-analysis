@@ -123,6 +123,7 @@ impl Analyzer {
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
             for parent in parent_names {
+                self.graph.add_node(parent.clone().function_name.clone());
                 if child_names.to_owned().len() > 0 {
                     for child in child_names.to_owned(){
                         if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
@@ -147,7 +148,6 @@ impl Analyzer {
                         }
                     } else {
                         parents.insert(parent.clone());
-                        self.graph.add_node(parent.clone().function_name.clone());
                     }
                 }
             }

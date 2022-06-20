@@ -536,7 +536,9 @@ impl LSPServer for ClangdServer {
                                     .lang_server
                                     .call_hierarchy_item(&document, symbol.range.start);
                                 let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                                unsuccessful_response = true;
                                 for call_hierarchy_item in call_hierarchy_array {
+                                    unsuccessful_response = false;
                                     let outgoing_calls = self
                                         .lang_server
                                         .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
