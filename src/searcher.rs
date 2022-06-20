@@ -12,6 +12,7 @@ use serde_json::Value;
 use crate::analyzer::FilterName;
 
 pub trait LSPServer {
+    fn restart(&mut self,);
     fn search_connection_filter(
         &mut self,
         parent_name: String,
@@ -44,6 +45,8 @@ pub struct ClangdServer {
     pub files_in_project: Vec<String>,
     pub project_path: String,
     pub index_map: HashMap<String, Vec<String>>,
+    use_call_hierarchy_outgoing: bool,
+    clangd_path: String,
 }
 
 pub struct FunctionNode {
@@ -74,7 +77,7 @@ impl Clone for FunctionNode {
                 let strategy = ForcedNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
-                    document: self.function_name.clone(),
+                    document: self.document.clone(),
                     match_strategy: Box::new(strategy),
                 }
 
@@ -83,7 +86,7 @@ impl Clone for FunctionNode {
                 let strategy = ParentChildNode { function_name: self.function_name.clone(), document: self.document.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
-                    document: self.function_name.clone(),
+                    document: self.document.clone(),
                     match_strategy: Box::new(strategy),
                 }
             }
@@ -141,8 +144,10 @@ impl ClangdServer {
             files_in_project: vec![],
             project_path,
             index_map: HashMap::new(),
+            use_call_hierarchy_outgoing: true,
+            clangd_path
         };
-        lsp_server.files_in_project = lsp_server.get_all_files_in_project(clangd_path);
+        lsp_server.files_in_project = lsp_server.get_all_files_in_project();
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
             log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
@@ -150,7 +155,25 @@ impl ClangdServer {
         Box::new(lsp_server)
     }
 
-    pub fn get_all_files_in_project(&mut self, clangd_path: String) -> Vec<String> {
+    pub fn restart_server(&mut self){
+        let shutdown_res = self.lang_server.exit();
+        if shutdown_res.is_err() {
+            log!(Level::Error, "{:?}", shutdown_res.err());
+        }
+        let new_lsp = lang_server::LanguageServerLauncher::new()
+            .server(self.clangd_path.to_owned())
+            .project(self.project_path.to_owned())
+            .launch()
+            .expect("Failed to spawn clangd");
+        self.lang_server = new_lsp;
+
+        let init_res = self.lang_server.initialize();
+        if init_res.is_err() {
+            eprintln!("{:?}", init_res.err());
+        }
+    }
+
+    pub fn get_all_files_in_project(&mut self) -> Vec<String> {
         let files: Vec<String>;
         let path_to_index = self.project_path.clone() + "/.cache/clangd/index";
         let index_dir  = fs::read_dir(path_to_index.clone());
@@ -165,7 +188,7 @@ impl ClangdServer {
             }
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
 
-            self.index_map = self.check_index_file(files.clone(), clangd_path);
+            self.index_map = self.check_index_file(files.clone(), self.clangd_path.clone());
         } else {
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
 
@@ -215,7 +238,7 @@ impl ClangdServer {
         if needs_indexing {
             let mut i = 0;
             let mut i_total = 0;
-            println!("start indexing, there should be a message displaying the progress every coupe of seconds, please restart the program if the messages stop unexpectedly");
+            eprintln!("start indexing, there should be a message displaying the progress every coupe of seconds, please restart the program if the messages stop unexpectedly");
             for file in files.clone() {
                 i += 1; i_total += 1;
                 let mut functions:Vec<String> = vec![];
@@ -223,22 +246,8 @@ impl ClangdServer {
                 if i >= 10 {
                     //break;
                     i = 0;
-                    println!("indexing project, please wait ({}/{})", i_total, files.clone().len());
-                    let shutdown_res = self.lang_server.exit();
-                    if shutdown_res.is_err() {
-                        log!(Level::Error, "{:?}", shutdown_res.err());
-                    }
-                    let new_lsp = lang_server::LanguageServerLauncher::new()
-                        .server(clangd_path.to_owned())
-                        .project(self.project_path.to_owned())
-                        .launch()
-                        .expect("Failed to spawn clangd");
-                    self.lang_server = new_lsp;
-
-                    let init_res = self.lang_server.initialize();
-                    if init_res.is_err() {
-                        println!("{:?}", init_res.err());
-                    }
+                    eprintln!("indexing project, please wait ({}/{})", i_total, files.clone().len());
+                    self.restart_server();
                 }
                 let document_res = self.lang_server.document_open(file.as_str());
                 if document_res.is_ok() {
@@ -310,6 +319,10 @@ impl ClangdServer {
 }
 
 impl LSPServer for ClangdServer {
+    fn restart(&mut self) {
+        self.restart_server();
+    }
+
     fn search_connection_filter(
         &mut self,
         parent_name: String,
@@ -343,28 +356,53 @@ impl LSPServer for ClangdServer {
                 }
             }
         } else {
-            for file_path in self.files_in_project.clone() {
-                let path = self.project_path.clone() + "/" + file_path.as_str();
-                let mut file = match File::open(&path) {
-                    Err(why) => panic!("could not open: {}", why),
-                    Ok(file) => file,
-                };
-                let mut s = String::new();
-                match file.read_to_string(&mut s) {
-                    Err(why) => panic!("could not read: {}", why),
-                    Ok(_) => {}
+            let mut doc_name = String::new();
+            for doc in self.index_map.clone() {
+                for func in doc.1 {
+                    if func == parent_name {
+                        doc_name = doc.0.clone();
+                    }
                 }
+            }
+            if doc_name.clone() == "" {
+                for file_path in self.files_in_project.clone() {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file,
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
 
-                let mut new_children = HashSet::new();
-                if s.contains(&parent_name.clone()) {
-                    new_children = self.search_child_single_document_filter(
-                        Regex::new(parent_name.as_str()).unwrap(),
-                        HashMap::new(),
-                        file_path.as_str(),
-                    );
+                    let mut new_children = HashSet::new();
+                    if s.contains(&parent_name.clone()) {
+                        new_children = self.search_child_single_document_filter(
+                            Regex::new(parent_name.as_str()).unwrap(),
+                            HashMap::new(),
+                            file_path.as_str(),
+                        );
+                    }
+                    for child in new_children {
+                        connections.insert(child);
+                    }
                 }
-                for child in new_children {
-                    connections.insert(child);
+            } else {
+                for file_path in self.files_in_project.clone() {
+                    if file_path.contains(&doc_name.clone()) {
+                        let mut new_children = HashSet::new();
+                        new_children = self.search_child_single_document_filter(
+                            Regex::new(parent_name.as_str()).unwrap(),
+                            HashMap::new(),
+                            file_path.as_str(),
+                        );
+
+                        for child in new_children {
+                            connections.insert(child);
+                        }
+                    }
                 }
             }
         }
@@ -483,48 +521,64 @@ impl LSPServer for ClangdServer {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
                         let func_name = symbol.name;
-                        if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self
-                                .lang_server
-                                .call_hierarchy_item(&document, symbol.range.start);
-                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            for call_hierarchy_item in call_hierarchy_array{
-                                let outgoing_calls = self
+                        let filter = Regex::new((func_filter.to_string() + "zzz").as_str()).unwrap();
+                        let function_name_for_filter = func_name.clone() + "zzz";
+                        if filter.is_match(function_name_for_filter.as_str()) {
+                            let mut unsuccessful_response = false;
+
+                            if self.use_call_hierarchy_outgoing {
+                                let prep_call_hierarchy = self
                                     .lang_server
-                                    .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
-                                let mut unsuccessful_response;
-                                if outgoing_calls.is_ok() {
-                                    unsuccessful_response = true;
-                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                        unsuccessful_response = false;
-                                        if func_filter_c.is_match(outgoing_call.to.name.as_str())
-                                            && file_filter_c.is_match(outgoing_call.to.uri.as_str())
-                                        {
-                                            if outgoing_call.to.kind == SymbolKind::FUNCTION {
-                                                result.insert((
-                                                    func_name.clone(),
-                                                    outgoing_call.to.name.to_string(),
-                                                ));
+                                    .call_hierarchy_item(&document, symbol.range.start);
+                                let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                                for call_hierarchy_item in call_hierarchy_array {
+                                    let outgoing_calls = self
+                                        .lang_server
+                                        .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
+                                    if outgoing_calls.is_ok() {
+                                        unsuccessful_response = true;
+                                        for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                            unsuccessful_response = false;
+                                            if func_filter_c.is_match(outgoing_call.to.name.as_str())
+                                                && file_filter_c.is_match(outgoing_call.to.uri.as_str())
+                                            {
+                                                if outgoing_call.to.kind == SymbolKind::FUNCTION {
+                                                    result.insert((
+                                                        func_name.clone(),
+                                                        outgoing_call.to.name.to_string(),
+                                                    ));
+                                                }
                                             }
                                         }
+                                    } else {
+                                        unsuccessful_response = true;
+                                        self.use_call_hierarchy_outgoing = false;
                                     }
-                                } else {
-                                    unsuccessful_response = true
                                 }
-                                if unsuccessful_response {
-                                    let doc_text = document.text.clone();
-                                    let doc_lines: Vec<&str> = doc_text.split("\n").collect();
-                                    let start: usize = (symbol.range.start.line + 1) as usize;
-                                    let end: usize = symbol.range.end.line as usize;
+                            } else {
+                                unsuccessful_response = true;
+                            }
+                            if unsuccessful_response {
+                                let doc_text = document.text.clone();
+                                let doc_lines: Vec<&str> = doc_text.split("\n").collect();
+                                let start: usize = (symbol.range.start.line + 1) as usize;
+                                let end: usize = symbol.range.end.line as usize;
+                                if start < end {
                                     let function_data = doc_lines[start..end].concat();
                                     for file in self.index_map.clone() {
-                                        for function_name in file.1 {
-                                            if function_data.contains(&function_name){
-                                                result.insert((func_name.clone(), function_name.clone()));
+                                        if file_filter_c.is_match(file.0.as_str()){
+                                            for function_name in file.1 {
+                                                if func_filter_c.is_match(function_name.as_str()) {
+                                                    let search_name = function_name.clone() + "(";
+                                                    if function_data.contains(&search_name) {
+                                                        result.insert((func_name.clone(), function_name.clone()));
+                                                    }
+                                                }
                                             }
                                         }
                                     }
                                 }
+
                             }
                         }
                     }
@@ -614,18 +668,18 @@ impl LSPServer for ClangdServer {
                     for symbol in doc_symbols {
                         if symbol.kind == SymbolKind::FUNCTION {
                             let func_name = symbol.name;
-                            if parent_name == func_name {
+                            if child_name == func_name {
                                 let prep_call_hierarchy = self
                                     .lang_server
                                     .call_hierarchy_item(&document, symbol.range.start);
                                 let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
                                 if call_hierarchy_array.len() > 0 {
-                                    let outgoing_calls =
-                                        self.lang_server.call_hierarchy_item_outgoing(
+                                    let incoming_calls =
+                                        self.lang_server.call_hierarchy_item_incoming(
                                             call_hierarchy_array[0].clone(),
                                         );
-                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                        if outgoing_call.to.name.as_str() == child_name {
+                                    for incoming_call in incoming_calls.unwrap().unwrap() {
+                                        if incoming_call.from.name.as_str() == parent_name {
                                             return true;
                                         }
                                     }

@@ -64,6 +64,7 @@ impl Analyzer {
     fn interpret_statement(&mut self, ast: AstNode, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
         let mut parent_filter: Vec<HashMap<FilterName, Regex>> = Vec::new();
         let mut child_names: HashSet<FunctionNode> = HashSet::new();
+        let mut child_list: HashSet<String> = HashSet::new();
         let mut do_search = false;
         match ast {
             AstNode::Statement { verb, scope } => {
@@ -88,7 +89,37 @@ impl Analyzer {
             }
             _ => {}
         }
+        if parent_filter.len() == 0 && do_search {
+            if child_names.to_owned().len() == 0 {
+                let node = ParentChildNode {
+                    function_name: 1.to_string(),
+                    document: "NONE".to_string()
+                };
+                return HashSet::from(
+                    [FunctionNode { function_name: 1.to_string(), document: "NONE".to_string(), match_strategy: Box::new(node) }]
+                );
+            }
+            else if child_names.to_owned().len() == 1 {
+                let child = child_names.iter().last().unwrap();
+                if child.document == "NONE" && child.function_name.as_str().parse::<i32>().is_ok(){
+                    let i = child.function_name.as_str().parse::<i32>().unwrap() + 1;
+                    let node = ParentChildNode {
+                        function_name: i.to_string(),
+                        document: "NONE".to_string()
+                    };
+                    return HashSet::from([FunctionNode { function_name: i.to_string(), document: "NONE".to_string(), match_strategy: Box::new(node) }]);
+                }
+            }
+        }
 
+        let mut search_grandparents = 0;
+        if child_names.len() == 1 {
+            let child=child_names.iter().last().unwrap().to_owned();
+            if child.function_name.as_str().parse::<i32>().is_ok() && child.document == "NONE" {
+                search_grandparents = child.function_name.as_str().parse::<i32>().unwrap();
+                child_names.remove(&child);
+            }
+        }
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
             for parent in parent_names {
@@ -109,6 +140,7 @@ impl Analyzer {
                         );
                         parents.insert(parent.clone());
                         for child in children{
+                            child_list.insert(child.clone().1);
                             let a = self.graph.add_node(parent.clone().function_name.clone());
                             let b = self.graph.add_node(child.1);
                             self.graph.pet_graph.add_edge(a, b, ());
@@ -135,6 +167,29 @@ impl Analyzer {
                 }
             }
         }
+
+        while search_grandparents > 0 {
+            let mut new_child_list = HashSet::new();
+
+            for child in child_list {
+                let parent = child.clone();
+                let grand_children = self.lang_server.search_connection_filter(
+                    parent.clone(),
+                    String::new(),
+                );
+                for grand_child in grand_children{
+                    new_child_list.insert(grand_child.clone().1);
+                    let a = self.graph.add_node(parent.clone());
+                    let b = self.graph.add_node(grand_child.1);
+                    self.graph.pet_graph.add_edge(a, b, ());
+                }
+            }
+            self.lang_server.restart();
+
+            child_list = new_child_list;
+            search_grandparents -= 1;
+        }
+
         parents
     }
 
