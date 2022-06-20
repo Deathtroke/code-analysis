@@ -12,6 +12,10 @@ impl MockLSPServer {
 }
 
 impl LSPServer for MockLSPServer {
+    fn restart(&mut self) {
+        unimplemented!();
+    }
+
     fn search_connection_filter(
         &mut self,
         parent_filter: String,
