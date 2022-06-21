@@ -1,7 +1,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::string::String;
-use log::{log, Level};
+use log::{log, Level, error};
 use super::*;
 
 use regex::Regex;
@@ -47,7 +47,7 @@ impl Analyzer {
                 }
             }
         } else {
-            eprintln!("unable to parse input: {:?}", ast_result.err());
+            panic!("unable to parse input: {:?}", ast_result.err());
         }
     }
 
