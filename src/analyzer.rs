@@ -89,6 +89,7 @@ impl Analyzer {
             }
             _ => {}
         }
+        self.lang_server.restart();
         if parent_filter.len() == 0 && do_search {
             if child_names.to_owned().len() == 0 {
                 let node = ParentChildNode {
@@ -122,15 +123,21 @@ impl Analyzer {
         }
         if  parent_filter.len() > 0 {
             let parent_names = self.lang_server.find_func_name(parent_filter);
+            let mut i = 0;
             for parent in parent_names {
                 self.graph.add_node(parent.clone().function_name.clone());
                 if child_names.to_owned().len() > 0 {
                     for child in child_names.to_owned(){
+                        i += 1;
+                        if i >= 10{
+                            i = 0;
+                            self.lang_server.restart();
+                        }
                         if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
                             parents.insert(parent.clone());
                             let a = self.graph.add_node(parent.function_name.clone());
                             let b = self.graph.add_node(child.function_name.clone());
-                            self.graph.pet_graph.add_edge(a, b, ());
+                            self.graph.add_edge(a, b);
                         }
                     }
                 } else {
@@ -144,7 +151,7 @@ impl Analyzer {
                             child_list.insert(child.clone().1);
                             let a = self.graph.add_node(parent.clone().function_name.clone());
                             let b = self.graph.add_node(child.1);
-                            self.graph.pet_graph.add_edge(a, b, ());
+                            self.graph.add_edge(a, b);
                         }
                     } else {
                         parents.insert(parent.clone());
@@ -163,7 +170,7 @@ impl Analyzer {
 
                     let a = self.graph.add_node(parent.0.clone());
                     let b = self.graph.add_node(child.function_name.clone());
-                    self.graph.pet_graph.add_edge(a, b, ());
+                    self.graph.add_edge(a, b);
                 }
             }
         }
@@ -181,7 +188,7 @@ impl Analyzer {
                     new_child_list.insert(grand_child.clone().1);
                     let a = self.graph.add_node(parent.clone());
                     let b = self.graph.add_node(grand_child.1);
-                    self.graph.pet_graph.add_edge(a, b, ());
+                    self.graph.add_edge(a, b);
                 }
             }
             self.lang_server.restart();
@@ -189,7 +196,6 @@ impl Analyzer {
             child_list = new_child_list;
             search_grandparents -= 1;
         }
-
         parents
     }
 

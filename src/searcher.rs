@@ -1,6 +1,6 @@
 use crate::lang_server::LanguageServer;
 use crate::lang_server;
-use lsp_types::{DocumentSymbolResponse, SymbolKind};
+use lsp_types::{DocumentSymbolResponse, Range, SymbolKind};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -336,28 +336,59 @@ impl LSPServer for ClangdServer {
         let mut connections: HashSet<(String, String)> = HashSet::new();
 
         if parent_name.as_str() == "" {
-            for file_path in self.files_in_project.clone() {
-                let path = self.project_path.clone() + "/" + file_path.as_str();
-                let mut file = match File::open(&path) {
-                    Err(why) => panic!("could not open: {}", why),
-                    Ok(file) => file,
-                };
-                let mut s = String::new();
-                match file.read_to_string(&mut s) {
-                    Err(why) => panic!("could not read: {}", why),
-                    Ok(_) => {}
+            let mut doc_name = String::new();
+            for doc in self.index_map.clone() {
+                for func in doc.1 {
+                    if func == child_name {
+                        doc_name = doc.0.clone();
+                    }
                 }
+            }
+            if doc_name.clone() == "" {
+                let mut i = 0;
+                for file_path in self.files_in_project.clone() {
+                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                    let mut file = match File::open(&path) {
+                        Err(why) => panic!("could not open: {}", why),
+                        Ok(file) => file,
+                    };
+                    let mut s = String::new();
+                    match file.read_to_string(&mut s) {
+                        Err(why) => panic!("could not read: {}", why),
+                        Ok(_) => {}
+                    }
 
-                let mut new_children = HashSet::new();
-                if s.contains(&child_name.clone()) {
-                    new_children = self.search_parent_single_document_filter(
-                        Regex::new(child_name.as_str()).unwrap(),
-                        HashMap::new(),
-                        file_path.as_str(),
-                    );
+                    let mut new_parents = HashSet::new();
+                    if s.contains(&child_name.clone()) {
+                        i += 1;
+                        if i >= 10 {
+                            i = 0;
+                            self.restart_server();
+                        }
+                        new_parents = self.search_parent_single_document_filter(
+                            Regex::new(child_name.as_str()).unwrap(),
+                            HashMap::new(),
+                            file_path.as_str(),
+                        );
+                    }
+                    for parent in new_parents {
+                        connections.insert(parent);
+                    }
                 }
-                for child in new_children {
-                    connections.insert(child);
+            } else {
+                for file_path in self.files_in_project.clone() {
+                    if file_path.contains(&doc_name.clone()) {
+                        let mut new_parent = HashSet::new();
+                        new_parent = self.search_parent_single_document_filter(
+                            Regex::new(child_name.as_str()).unwrap(),
+                            HashMap::new(),
+                            file_path.as_str(),
+                        );
+
+                        for parent in new_parent {
+                            connections.insert(parent);
+                        }
+                    }
                 }
             }
         } else {
@@ -442,6 +473,7 @@ impl LSPServer for ClangdServer {
                 let regex = f.get(&FilterName::Function).unwrap();
                 function_filter = regex.to_owned();
             }
+            let mut i = 0;
             for file_path in self.files_in_project.clone() {
                 if file_filter.is_match(file_path.as_str()) {
                     let path = self.project_path.clone() + "/" + file_path.as_str();
@@ -458,6 +490,11 @@ impl LSPServer for ClangdServer {
                     let need_lsp = (function_filter.is_match(s.as_str()) && !only_ident) || (s.contains(&ident.clone()) && only_ident);
 
                     if need_lsp {
+                        i += 1;
+                        if i >= 10 {
+                            i = 0;
+                            self.restart_server();
+                        }
                         let ident_opt :Option<String> = if only_ident {
                              Some(ident.clone())
                         } else {
@@ -626,12 +663,61 @@ impl LSPServer for ClangdServer {
             Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
                 for symbol in doc_symbols {
                     if symbol.kind == SymbolKind::FUNCTION {
-                        let func_name = symbol.name;
+                        let func_name = symbol.name.clone();
                         if func_filter.is_match(func_name.as_str()) {
-                            let prep_call_hierarchy = self
+                            let mut prep_call_hierarchy = self
                                 .lang_server
                                 .call_hierarchy_item(&document, symbol.range.start);
-                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            let mut call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                            if call_hierarchy_array.len() == 0 {
+                                let mut i = 0;
+                                self.restart_server();
+                                for doc in self.index_map.clone() {
+                                    let file_path = doc.0;
+                                    let path = self.project_path.clone() + "/" + file_path.as_str();
+                                    let mut file = match File::open(&path) {
+                                        Err(why) => panic!("could not open: {}", why),
+                                        Ok(file) => file,
+                                    };
+                                    let mut s = String::new();
+                                    match file.read_to_string(&mut s) {
+                                        Err(why) => panic!("could not read: {}", why),
+                                        Ok(_) => {}
+                                    }
+
+                                    let filter_str = (func_filter.to_string().clone() + "(").clone();
+                                    if s.contains(&filter_str) {
+                                        i += 1;
+                                        if i >= 5 {
+                                            i = 0;
+                                            self.restart_server();
+                                        }
+                                        let search_document_resp = self.lang_server.document_open(&file_path.as_str()).unwrap();
+                                        let search_doc_symbol = self.lang_server.document_symbol(&search_document_resp).unwrap();
+                                        let search_nested_symbol = search_doc_symbol.unwrap();
+                                        match search_nested_symbol {
+                                            DocumentSymbolResponse::Flat(_) => {
+                                                log!(Level::Warn ,"unsupported symbols found");
+                                            }
+                                            DocumentSymbolResponse::Nested(search_symbols) => {
+                                                let doc_lines: Vec<&str> = s.split("\n").collect();
+                                                let mut j:u32 = 0;
+                                                while (j as usize) < doc_lines.len() {
+                                                    if doc_lines[(j as usize)].contains(&filter_str) {
+                                                        for search_symbol in search_symbols.clone() {
+                                                            if search_symbol.range.start.line <= j && j <= search_symbol.range.end.line {
+                                                                result.insert((search_symbol.name.clone(), symbol.name.clone()));
+                                                            }
+                                                        }
+
+                                                    }
+                                                    j += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             for call_hierarchy_item in call_hierarchy_array {
                                 let incoming_calls = self
                                     .lang_server

@@ -33,6 +33,18 @@ impl Graph {
         result_index
     }
 
+    pub fn add_edge(&mut self, start: NodeIndex, end : NodeIndex) {
+        let mut node_exists = false;
+        for node in self.pet_graph.edge_indices(){
+            if self.pet_graph.contains_edge(start, end) {
+                node_exists = true;
+            }
+        }
+        if !node_exists {
+            self.pet_graph.add_edge(start, end, ());
+        }
+    }
+
     pub fn graph_to_dot(&mut self) -> String {
         format!("{:?}",  petgraph::dot::Dot::new(&self.pet_graph.clone()))
     }
