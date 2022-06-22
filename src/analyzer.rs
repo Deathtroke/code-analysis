@@ -130,7 +130,6 @@ impl Analyzer {
                 if child_names.to_owned().len() > 0 {
                     let mut did_find_important_node = false;
                     for mut child in child_names.to_owned(){
-                        println!("{:?}", child.function_name);
                         i += 1;
                         if i >= 10{
                             i = 0;
@@ -161,8 +160,6 @@ impl Analyzer {
                                         }
                                     }
                                 }
-                            } else {
-                                println!("x");
                             }
                         }
                     }
