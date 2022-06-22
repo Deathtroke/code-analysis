@@ -55,13 +55,14 @@ impl Analyzer {
         let mut function_names: HashSet<FunctionNode> = HashSet::new();
 
         for ast in ast_nodes {
-            function_names = self.interpret_statement(ast, function_names.clone());
+            function_names = self.interpret_statement(ast);
 
         }
         function_names
     }
 
-    fn interpret_statement(&mut self, ast: AstNode, mut parents: HashSet<FunctionNode>) -> HashSet<FunctionNode> {
+    fn interpret_statement(&mut self, ast: AstNode) -> HashSet<FunctionNode> {
+        let mut parents: HashSet<FunctionNode> = HashSet::new();
         let mut parent_filter: Vec<HashMap<FilterName, Regex>> = Vec::new();
         let mut child_names: HashSet<FunctionNode> = HashSet::new();
         let mut child_list: HashSet<String> = HashSet::new();
@@ -97,7 +98,7 @@ impl Analyzer {
                     document: "NONE".to_string()
                 };
                 return HashSet::from(
-                    [FunctionNode { function_name: 1.to_string(), document: "NONE".to_string(), match_strategy: Box::new(node) }]
+                    [FunctionNode { function_name: 1.to_string(), document: "NONE".to_string(), priority: 0, match_strategy: Box::new(node) }]
                 );
             }
             else if child_names.to_owned().len() == 1 {
@@ -108,7 +109,7 @@ impl Analyzer {
                         function_name: i.to_string(),
                         document: "NONE".to_string()
                     };
-                    return HashSet::from([FunctionNode { function_name: i.to_string(), document: "NONE".to_string(), match_strategy: Box::new(node) }]);
+                    return HashSet::from([FunctionNode { function_name: i.to_string(), document: "NONE".to_string(), priority: 0, match_strategy: Box::new(node) }]);
                 }
             }
         }
@@ -127,17 +128,42 @@ impl Analyzer {
             for parent in parent_names {
                 self.graph.add_node(parent.clone().function_name.clone());
                 if child_names.to_owned().len() > 0 {
-                    for child in child_names.to_owned(){
+                    let mut did_find_important_node = false;
+                    for mut child in child_names.to_owned(){
+                        println!("{:?}", child.function_name);
                         i += 1;
                         if i >= 10{
                             i = 0;
                             self.lang_server.restart();
                         }
-                        if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
-                            parents.insert(parent.clone());
-                            let a = self.graph.add_node(parent.function_name.clone());
-                            let b = self.graph.add_node(child.function_name.clone());
-                            self.graph.add_edge(a, b);
+                        if child.priority == 1 {
+                            if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
+                                parents.insert(parent.clone());
+                                let a = self.graph.add_node(parent.function_name.clone());
+                                let b = self.graph.add_node(child.function_name.clone());
+                                self.graph.add_edge(a, b);
+                                child.priority = 2;
+                                child_names.remove(&child);
+                                child_names.insert(child);
+                                did_find_important_node = true;
+                            }
+                        }
+                    }
+                    if did_find_important_node {
+                        //remove unimportant nodes from graph
+                        for child in child_names.clone(){
+                            if child.priority == 1 {
+                                for node in self.graph.pet_graph.node_indices() {
+                                    let node_name = self.graph.pet_graph.node_weight(node);
+                                    if node_name.is_some(){
+                                        if node_name.unwrap().to_owned() == child.function_name {
+                                            self.graph.pet_graph.remove_node(node);
+                                        }
+                                    }
+                                }
+                            } else {
+                                println!("x");
+                            }
                         }
                     }
                 } else {
@@ -166,7 +192,13 @@ impl Analyzer {
                         function_name: parent.0.clone(),
                         document: "".to_string()
                     };
-                    parents.insert(FunctionNode{ function_name: parent.0.clone(), document: "".to_string(), match_strategy: Box::new(node) });
+                    let prio: u32;
+                    if parent.0.clone() == child.function_name {
+                        prio = 2;
+                    } else {
+                        prio = 1;
+                    }
+                    parents.insert(FunctionNode{ function_name: parent.0.clone(), document: "".to_string(), priority: prio, match_strategy: Box::new(node) });
 
                     let a = self.graph.add_node(parent.0.clone());
                     let b = self.graph.add_node(child.function_name.clone());

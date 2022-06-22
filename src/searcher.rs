@@ -52,6 +52,7 @@ pub struct ClangdServer {
 pub struct FunctionNode {
     pub function_name: String,
     pub document: String,
+    pub priority: u32,
     pub match_strategy: Box<dyn MatchFunctionEdge>
 }
 
@@ -78,6 +79,7 @@ impl Clone for FunctionNode {
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.document.clone(),
+                    priority: self.priority.clone(),
                     match_strategy: Box::new(strategy),
                 }
 
@@ -87,6 +89,7 @@ impl Clone for FunctionNode {
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.document.clone(),
+                    priority: self.priority.clone(),
                     match_strategy: Box::new(strategy),
                 }
             }
@@ -125,7 +128,11 @@ impl MatchFunctionEdge for ForcedNode {
 
 impl MatchFunctionEdge for ParentChildNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
-        lsp_server.find_link(self.function_name.clone(), match_target.function_name, self.document.as_str())
+        lsp_server.find_link(
+            self.function_name.clone(),
+            match_target.function_name,
+            self.document.as_str()
+        )
     }
     fn get_implementation(&self) -> String{
         "ParentChildEdge".to_string()
@@ -509,13 +516,13 @@ impl LSPServer for ClangdServer {
                                     function_name: name.clone(),
                                     document: file_path.clone()
                                 };
-                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(),priority: 2, match_strategy: Box::new(node)});
                             } else {
                                 let node = ParentChildNode {
                                     function_name: name.clone(),
                                     document: file_path.clone()
                                 };
-                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), match_strategy: Box::new(node)});
+                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), priority: 2, match_strategy: Box::new(node)});
 
                             }
                         }
@@ -527,7 +534,7 @@ impl LSPServer for ClangdServer {
                     function_name: function_filter.as_str().to_string(),
                     document: "not found".to_string()
                 };
-                func_names.insert( FunctionNode{function_name: node.function_name.clone(), document: node.document.clone(), match_strategy: Box::new(node)});
+                func_names.insert( FunctionNode{function_name: node.function_name.clone(), document: node.document.clone(), priority: 2, match_strategy: Box::new(node)});
 
             }
         }
@@ -705,7 +712,7 @@ impl LSPServer for ClangdServer {
                                                 while (j as usize) < doc_lines.len() {
                                                     if doc_lines[(j as usize)].contains(&filter_str) {
                                                         for search_symbol in search_symbols.clone() {
-                                                            if search_symbol.range.start.line <= j && j <= search_symbol.range.end.line {
+                                                            if search_symbol.range.start.line + 1 <= j && j <= search_symbol.range.end.line {
                                                                 result.insert((search_symbol.name.clone(), symbol.name.clone()));
                                                             }
                                                         }
