@@ -135,17 +135,16 @@ impl Analyzer {
                             i = 0;
                             self.lang_server.restart();
                         }
-                        if child.priority == 1 {
-                            if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
-                                parents.insert(parent.clone());
-                                let a = self.graph.add_node(parent.function_name.clone());
-                                let b = self.graph.add_node(child.function_name.clone());
-                                self.graph.add_edge(a, b);
-                                child.priority = 2;
-                                child_names.remove(&child);
-                                child_names.insert(child);
-                                did_find_important_node = true;
-                            }
+                        if parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server) {
+                            parents.insert(parent.clone());
+                            let a = self.graph.add_node(parent.function_name.clone());
+                            let b = self.graph.add_node(child.function_name.clone());
+                            self.graph.add_edge(a, b);
+                            child.priority = 2;
+                            child_names.remove(&child);
+                            child_names.insert(child);
+                            did_find_important_node = true;
+
                         }
                     }
                     if did_find_important_node {

@@ -755,42 +755,15 @@ impl LSPServer for ClangdServer {
     }
 
     fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
-        let document_res = self.lang_server.document_open(document_name);
-        if document_res.is_ok() {
-            let document = document_res.unwrap();
-            let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+        let children = self.search_child_single_document_filter(
+            Regex::new(parent_name.as_str()).unwrap(),
+            HashMap::new(),
+            document_name
+        );
 
-            match doc_symbol {
-                Some(DocumentSymbolResponse::Flat(_)) => {
-                    log!(Level::Warn ,"unsupported symbols found");
-                }
-                Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                    for symbol in doc_symbols {
-                        if symbol.kind == SymbolKind::FUNCTION {
-                            let func_name = symbol.name;
-                            if child_name == func_name {
-                                let prep_call_hierarchy = self
-                                    .lang_server
-                                    .call_hierarchy_item(&document, symbol.range.start);
-                                let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                                if call_hierarchy_array.len() > 0 {
-                                    let incoming_calls =
-                                        self.lang_server.call_hierarchy_item_incoming(
-                                            call_hierarchy_array[0].clone(),
-                                        );
-                                    for incoming_call in incoming_calls.unwrap().unwrap() {
-                                        if incoming_call.from.name.as_str() == parent_name {
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                None => {
-                    log!(Level::Warn, "no symbols found");
-                }
+        for child in children {
+            if child.1 == child_name {
+                return true
             }
         }
         false
