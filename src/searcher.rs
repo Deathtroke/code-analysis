@@ -1,6 +1,6 @@
 use crate::lang_server::LanguageServer;
 use crate::lang_server;
-use lsp_types::{DocumentSymbolResponse, Range, SymbolKind};
+use lsp_types::{DocumentSymbolResponse, SymbolKind};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -13,36 +13,16 @@ use crate::analyzer::FilterName;
 
 pub trait LSPServer {
     fn restart(&mut self,);
-    fn search_connection_filter(
-        &mut self,
-        parent_name: String,
-        child_name: String,
-    ) -> HashSet<(String, String)>;
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode>;
-    fn search_child_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        child_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)>;
-    fn search_parent_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        parent_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)>;
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool;
-    fn find_functions_in_doc(&mut self, func_filter: Regex, ident: Option<String>, document_name: &str)
-        -> HashSet<String>;
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)>;
     fn close(&mut self);
 }
 
 pub struct ClangdServer {
     pub lang_server: Box<dyn LanguageServer>,
-    pub files_in_project: Vec<String>,
     pub project_path: String,
     pub index_map: HashMap<String, Vec<String>>,
     use_call_hierarchy_outgoing: bool,
@@ -50,15 +30,16 @@ pub struct ClangdServer {
 }
 
 pub struct FunctionNode {
-    pub function_name: String,
+    pub function_name: HashSet<String>,
     pub document: String,
-    pub priority: u32,
     pub match_strategy: Box<dyn MatchFunctionEdge>
 }
 
 impl Hash for FunctionNode {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.function_name.hash(state);
+        for function in &self.function_name {
+            function.hash(state);
+        }
         self.document.hash(state);
     }
 }
@@ -79,7 +60,6 @@ impl Clone for FunctionNode {
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.document.clone(),
-                    priority: self.priority.clone(),
                     match_strategy: Box::new(strategy),
                 }
 
@@ -89,7 +69,6 @@ impl Clone for FunctionNode {
                 FunctionNode{
                     function_name: self.function_name.clone(),
                     document: self.document.clone(),
-                    priority: self.priority.clone(),
                     match_strategy: Box::new(strategy),
                 }
             }
@@ -99,26 +78,32 @@ impl Clone for FunctionNode {
 }
 
 pub trait MatchFunctionEdge {
-    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool;
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)>;
     fn get_implementation(&self) -> String;
 }
 
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ForcedNode {
-    pub function_name: String,
+    pub function_name: HashSet<String>,
     pub document: String,
 }
 
 pub struct ParentChildNode {
-    pub function_name: String,
+    pub function_name: HashSet<String>,
     pub document: String,
 }
 
 impl MatchFunctionEdge for ForcedNode {
-    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)> {
         #[allow(dead_code)]
-        if false { drop(match_target); drop(lsp_server); unimplemented!()}
-        true
+        if false { drop(lsp_server); unimplemented!()}
+        let mut result = HashSet::new();
+        for child in match_target.function_name.clone() {
+            for parent in self.function_name.clone() {
+                result.insert((parent.clone(), child.clone()));
+            }
+        }
+        result
     }
     fn get_implementation(&self) -> String {
         "ForcedEdge".to_string()
@@ -127,11 +112,12 @@ impl MatchFunctionEdge for ForcedNode {
 }
 
 impl MatchFunctionEdge for ParentChildNode {
-    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> bool {
+    fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)> {
         lsp_server.find_link(
             self.function_name.clone(),
-            match_target.function_name,
-            self.document.as_str()
+            match_target.function_name.clone(),
+            self.document.as_str(),
+            match_target.document.as_str()
         )
     }
     fn get_implementation(&self) -> String{
@@ -148,13 +134,12 @@ impl ClangdServer {
                 .project(project_path.to_owned())
                 .launch()
                 .expect("Failed to spawn clangd"),
-            files_in_project: vec![],
             project_path,
             index_map: HashMap::new(),
             use_call_hierarchy_outgoing: true,
             clangd_path
         };
-        lsp_server.files_in_project = lsp_server.get_all_files_in_project();
+        lsp_server.get_all_files_in_project();
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
             log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
@@ -195,7 +180,7 @@ impl ClangdServer {
             }
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), Some(index_file_names.clone()));
 
-            self.index_map = self.check_index_file(files.clone(), self.clangd_path.clone());
+            self.index_map = self.check_index_file(files.clone());
         } else {
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
 
@@ -203,7 +188,7 @@ impl ClangdServer {
         files
     }
 
-    fn check_index_file(&mut self, files: Vec<String>, clangd_path: String) -> HashMap<String, Vec<String>> {
+    fn check_index_file(&mut self, files: Vec<String>) -> HashMap<String, Vec<String>> {
         let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
 
         let path = self.project_path.clone() + "/.cache/index.json";
@@ -335,481 +320,304 @@ impl LSPServer for ClangdServer {
         self.restart_server();
     }
 
-    fn search_connection_filter(
-        &mut self,
-        parent_name: String,
-        child_name: String,
-    ) -> HashSet<(String, String)> {
-        let mut connections: HashSet<(String, String)> = HashSet::new();
-
-        if parent_name.as_str() == "" {
-            let mut doc_name = String::new();
-            for doc in self.index_map.clone() {
-                for func in doc.1 {
-                    if func == child_name {
-                        doc_name = doc.0.clone();
-                    }
-                }
-            }
-            if doc_name.clone() == "" {
-                let mut i = 0;
-                for file_path in self.files_in_project.clone() {
-                    let path = self.project_path.clone() + "/" + file_path.as_str();
-                    let mut file = match File::open(&path) {
-                        Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file,
-                    };
-                    let mut s = String::new();
-                    match file.read_to_string(&mut s) {
-                        Err(why) => panic!("could not read: {}", why),
-                        Ok(_) => {}
-                    }
-
-                    let mut new_parents = HashSet::new();
-                    if s.contains(&child_name.clone()) {
-                        i += 1;
-                        if i >= 10 {
-                            i = 0;
-                            self.restart_server();
-                        }
-                        new_parents = self.search_parent_single_document_filter(
-                            Regex::new(child_name.as_str()).unwrap(),
-                            HashMap::new(),
-                            file_path.as_str(),
-                        );
-                    }
-                    for parent in new_parents {
-                        connections.insert(parent);
-                    }
-                }
-            } else {
-                for file_path in self.files_in_project.clone() {
-                    if file_path.contains(&doc_name.clone()) {
-                        let mut new_parent = HashSet::new();
-                        new_parent = self.search_parent_single_document_filter(
-                            Regex::new(child_name.as_str()).unwrap(),
-                            HashMap::new(),
-                            file_path.as_str(),
-                        );
-
-                        for parent in new_parent {
-                            connections.insert(parent);
-                        }
-                    }
-                }
-            }
-        } else {
-            let mut doc_name = String::new();
-            for doc in self.index_map.clone() {
-                for func in doc.1 {
-                    if func == parent_name {
-                        doc_name = doc.0.clone();
-                    }
-                }
-            }
-            if doc_name.clone() == "" {
-                for file_path in self.files_in_project.clone() {
-                    let path = self.project_path.clone() + "/" + file_path.as_str();
-                    let mut file = match File::open(&path) {
-                        Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file,
-                    };
-                    let mut s = String::new();
-                    match file.read_to_string(&mut s) {
-                        Err(why) => panic!("could not read: {}", why),
-                        Ok(_) => {}
-                    }
-
-                    let mut new_children = HashSet::new();
-                    if s.contains(&parent_name.clone()) {
-                        new_children = self.search_child_single_document_filter(
-                            Regex::new(parent_name.as_str()).unwrap(),
-                            HashMap::new(),
-                            file_path.as_str(),
-                        );
-                    }
-                    for child in new_children {
-                        connections.insert(child);
-                    }
-                }
-            } else {
-                for file_path in self.files_in_project.clone() {
-                    if file_path.contains(&doc_name.clone()) {
-                        let mut new_children = HashSet::new();
-                        new_children = self.search_child_single_document_filter(
-                            Regex::new(parent_name.as_str()).unwrap(),
-                            HashMap::new(),
-                            file_path.as_str(),
-                        );
-
-                        for child in new_children {
-                            connections.insert(child);
-                        }
-                    }
-                }
-            }
-        }
-        connections
-    }
-
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode> {
-        let mut func_names: HashSet<FunctionNode> = HashSet::new();
+        let mut func_nodes:HashSet<FunctionNode> = HashSet::new();
+
         for f in filter {
+
             let mut forced = false;
+            let mut only_ident = false;
+            let mut ident = String::new();
+            let mut file_filter = Regex::new(".").unwrap();
+            let mut function_filter = Regex::new(".").unwrap();
+
+
             if f.contains_key(&FilterName::Forced) {
                 forced = true;
             }
-            let mut only_ident = false;
-            let mut ident = String::new();
+
             if f.contains_key(&FilterName::FunctionNameFromIdent) {
                 ident = f.get(&FilterName::FunctionNameFromIdent).unwrap().to_string();
                 only_ident = true;
             }
 
-            let mut file_filter = Regex::new(".").unwrap();
             if f.contains_key(&FilterName::File) {
                 let regex = f.get(&FilterName::File).unwrap();
                 file_filter = regex.to_owned();
             }
 
-            let mut function_filter = Regex::new(".").unwrap();
             if f.contains_key(&FilterName::Function) {
                 let regex = f.get(&FilterName::Function).unwrap();
                 function_filter = regex.to_owned();
             }
-            let mut i = 0;
-            for file_path in self.files_in_project.clone() {
-                if file_filter.is_match(file_path.as_str()) {
-                    let path = self.project_path.clone() + "/" + file_path.as_str();
-                    let mut file = match File::open(&path) {
-                        Err(why) => panic!("could not open: {}", why),
-                        Ok(file) => file,
-                    };
+
+            for document in self.index_map.clone() {
+                let file = document.0;
+                if file_filter.is_match(file.as_str()) {
+                    let mut function_names: HashSet<String> = HashSet::new();
+                    for function in document.1.clone() {
+                        let mut found = false;
+                        if only_ident == true {
+                            if ident == function {
+                                found = true
+                            }
+                        } else {
+                            if function_filter.is_match(function.as_str()) {
+                                found = true;
+                            }
+                        }
+                        if found {
+                            function_names.insert(function.clone());
+                        }
+                    }
+                    if function_names.len() > 0 {
+                        if forced {
+                            let node = ForcedNode {
+                                function_name: function_names.clone(),
+                                document: file.clone(),
+                            };
+                            func_nodes.insert(FunctionNode { function_name: function_names.clone(), document: file.clone(), match_strategy: Box::new(node) });
+                        } else {
+                            let node = ParentChildNode {
+                                function_name: function_names.clone(),
+                                document: file.clone()
+                            };
+                            func_nodes.insert(FunctionNode { function_name: function_names.clone(), document: file.clone(), match_strategy: Box::new(node) });
+                        }
+                    }
+                }
+            }
+
+            if func_nodes.len() == 0 && function_filter.as_str() != "." {
+                let mut hash_set = HashSet::new();
+                hash_set.insert(function_filter.as_str().to_string());
+                let node = ParentChildNode {
+                    function_name: hash_set,
+                    document: "not found".to_string()
+                };
+                func_nodes.insert(FunctionNode{function_name: node.function_name.clone(), document: "not found".to_string(), match_strategy: Box::new(node)});
+
+            }
+        }
+
+        func_nodes
+    }
+
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)> {
+        //println!("{:?} -> {:?} @{}", parent_name, child_name, document_name_parent);
+        let mut connections : HashSet<(String, String)> = HashSet::new();
+
+        let mut need_lsp = true;
+
+
+
+        if parent_name.len() > child_name.len() {
+            for child in child_name{
+
+                    let path = self.project_path.clone() + "/" + document_name_child;
+
+                    let file = File::open(&path);
+                    if file.is_ok() {
+                        let mut s = String::new();
+                        match file.unwrap().read_to_string(&mut s) {
+                            Err(why) => panic!("could not read: {}", why),
+                            Ok(_) => {}
+                        }
+                        need_lsp = s.contains(&child);
+                    }
+                    if need_lsp {
+                        let mut parents: HashSet<String> = HashSet::new();
+
+                        let document = self.lang_server.document_open(document_name_child).unwrap();
+
+                        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
+
+                        match doc_symbol {
+                            Some(DocumentSymbolResponse::Flat(token)) => {
+                                log!(Level::Warn ,"unsupported symbols found {:?}", token);
+                            }
+                            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                                for symbol in doc_symbols {
+                                    if symbol.kind == SymbolKind::FUNCTION {
+                                        let mut func_name = symbol.name;
+                                        while func_name.starts_with('_') {
+                                            func_name = func_name.strip_prefix(&"_".to_string()).unwrap().to_string();
+                                        }
+                                        if func_name == child {
+                                            let prep_call_hierarchy = self
+                                                .lang_server
+                                                .call_hierarchy_item(&document, symbol.range.start);
+                                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                                            if call_hierarchy_array.len() == 0 {
+                                                let mut i = 0;
+                                                self.restart_server();
+                                                let path2 = self.project_path.clone() + "/" + document_name_parent;
+                                                let file2 = File::open(&path2);
+                                                if file2.is_ok() {
+                                                    let mut s2 = String::new();
+                                                    match file2.unwrap().read_to_string(&mut s2) {
+                                                        Err(why) => panic!("could not read: {}", why),
+                                                        Ok(_) => {}
+                                                    }
+
+                                                    let filter_str = (child.clone() + "(").clone();
+                                                    if s2.contains(&filter_str) {
+                                                        i += 1;
+                                                        if i >= 5 {
+                                                            i = 0;
+                                                            self.restart_server();
+                                                        }
+                                                        let search_document_resp = self.lang_server.document_open(&document_name_parent).unwrap();
+                                                        let search_doc_symbol = self.lang_server.document_symbol(&search_document_resp).unwrap();
+                                                        let search_nested_symbol = search_doc_symbol.unwrap();
+                                                        match search_nested_symbol {
+                                                            DocumentSymbolResponse::Flat(_) => {
+                                                                log!(Level::Warn ,"unsupported symbols found");
+                                                            }
+                                                            DocumentSymbolResponse::Nested(search_symbols) => {
+                                                                let doc_lines: Vec<&str> = s2.split("\n").collect();
+                                                                let mut j: u32 = 0;
+                                                                while (j as usize) < doc_lines.len() {
+                                                                    if doc_lines[(j as usize)].contains(&filter_str) {
+                                                                        for search_symbol in search_symbols.clone() {
+                                                                            if search_symbol.range.start.line < j && j <= search_symbol.range.end.line {
+                                                                                parents.insert(search_symbol.name.clone());
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    j += 1;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            for call_hierarchy_item in call_hierarchy_array {
+                                                let outgoing_calls = self
+                                                    .lang_server
+                                                    .call_hierarchy_item_incoming(call_hierarchy_item.clone());
+                                                if outgoing_calls.is_ok() {
+                                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                                        if outgoing_call.from.kind == SymbolKind::FUNCTION {
+                                                            parents.insert(outgoing_call.from.name.clone());
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                log!(Level::Warn, "no symbols found");
+                            }
+                        }
+                        for parent in parents {
+                            if parent_name.contains(&parent) {
+                                connections.insert((parent.clone(), child.clone()));
+                            }
+
+                    }
+                }
+            }
+        } else {
+            for parent in parent_name {
+                let path = self.project_path.clone() + "/" + document_name_parent;
+
+                let file = File::open(&path);
+                if file.is_ok() {
                     let mut s = String::new();
-                    match file.read_to_string(&mut s) {
+                    match file.unwrap().read_to_string(&mut s) {
                         Err(why) => panic!("could not read: {}", why),
                         Ok(_) => {}
                     }
-
-                    let need_lsp = (function_filter.is_match(s.as_str()) && !only_ident) || (s.contains(&ident.clone()) && only_ident);
-
-                    if need_lsp {
-                        i += 1;
-                        if i >= 10 {
-                            i = 0;
-                            self.restart_server();
-                        }
-                        let ident_opt :Option<String> = if only_ident {
-                             Some(ident.clone())
-                        } else {
-                            None
-                        };
-
-                        let names =
-                            self.find_functions_in_doc(function_filter.clone(), ident_opt, file_path.as_str());
-                        for name in names {
-                            if forced {
-                                let node = ForcedNode {
-                                    function_name: name.clone(),
-                                    document: file_path.clone()
-                                };
-                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(),priority: 2, match_strategy: Box::new(node)});
-                            } else {
-                                let node = ParentChildNode {
-                                    function_name: name.clone(),
-                                    document: file_path.clone()
-                                };
-                                func_names.insert( FunctionNode{function_name: name.clone(), document: file_path.clone(), priority: 2, match_strategy: Box::new(node)});
-
-                            }
-                        }
-                    }
+                    need_lsp = s.contains(&parent);
                 }
-            }
-            if func_names.len() == 0 && function_filter.as_str() != "." {
-                let node = ParentChildNode {
-                    function_name: function_filter.as_str().to_string(),
-                    document: "not found".to_string()
-                };
-                func_names.insert( FunctionNode{function_name: node.function_name.clone(), document: node.document.clone(), priority: 2, match_strategy: Box::new(node)});
 
-            }
-        }
+                if need_lsp {
+                    let mut children: HashSet<String> = HashSet::new();
 
+                    let document = self.lang_server.document_open(document_name_parent).unwrap();
 
-        func_names
-    }
-    fn search_child_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        child_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)> {
-        let mut result: HashSet<(String, String)> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
+                    let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
 
-        let mut file_filter_c = Regex::new(".").unwrap(); //any
-        if child_filter.contains_key("file") {
-            file_filter_c = Regex::new(child_filter.get("file").unwrap().as_str()).unwrap();
-        }
-        let mut func_filter_c = Regex::new(".").unwrap(); //any
-        if child_filter.contains_key("function") {
-            func_filter_c = Regex::new(child_filter.get("function").unwrap().as_str()).unwrap();
-        }
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(token)) => {
-                log!(Level::Warn ,"unsupported symbols found {:?}", token);
-            }
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.kind == SymbolKind::FUNCTION {
-                        let func_name = symbol.name;
-                        let filter = Regex::new((func_filter.to_string() + "zzz").as_str()).unwrap();
-                        let function_name_for_filter = func_name.clone() + "zzz";
-                        if filter.is_match(function_name_for_filter.as_str()) {
-                            let mut unsuccessful_response = false;
-
-                            if self.use_call_hierarchy_outgoing {
-                                let prep_call_hierarchy = self
-                                    .lang_server
-                                    .call_hierarchy_item(&document, symbol.range.start);
-                                let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                                unsuccessful_response = true;
-                                for call_hierarchy_item in call_hierarchy_array {
-                                    unsuccessful_response = false;
-                                    let outgoing_calls = self
-                                        .lang_server
-                                        .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
-                                    if outgoing_calls.is_ok() {
-                                        unsuccessful_response = true;
-                                        for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                            unsuccessful_response = false;
-                                            if func_filter_c.is_match(outgoing_call.to.name.as_str())
-                                                && file_filter_c.is_match(outgoing_call.to.uri.as_str())
-                                            {
-                                                if outgoing_call.to.kind == SymbolKind::FUNCTION {
-                                                    result.insert((
-                                                        func_name.clone(),
-                                                        outgoing_call.to.name.to_string(),
-                                                    ));
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        unsuccessful_response = true;
-                                        self.use_call_hierarchy_outgoing = false;
-                                    }
-                                }
-                            } else {
-                                unsuccessful_response = true;
-                            }
-                            if unsuccessful_response {
-                                let doc_text = document.text.clone();
-                                let doc_lines: Vec<&str> = doc_text.split("\n").collect();
-                                let start: usize = (symbol.range.start.line + 1) as usize;
-                                let end: usize = symbol.range.end.line as usize;
-                                if start < end {
-                                    let function_data = doc_lines[start..end].concat();
-                                    for file in self.index_map.clone() {
-                                        if file_filter_c.is_match(file.0.as_str()){
-                                            for function_name in file.1 {
-                                                if func_filter_c.is_match(function_name.as_str()) {
-                                                    let search_name = function_name.clone() + "(";
-                                                    if function_data.contains(&search_name) {
-                                                        result.insert((func_name.clone(), function_name.clone()));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                            }
+                    match doc_symbol {
+                        Some(DocumentSymbolResponse::Flat(token)) => {
+                            log!(Level::Warn ,"unsupported symbols found {:?}", token);
                         }
-                    }
-                }
-            }
-            None => {
-                log!(Level::Warn, "no symbols found");
-            }
-        }
-
-        result
-    }
-
-    fn search_parent_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        parent_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)> {
-        let mut result: HashSet<(String, String)> = HashSet::new();
-        let document = self.lang_server.document_open(document_name).unwrap();
-
-        let mut file_filter_c = Regex::new(".").unwrap(); //any
-        if parent_filter.contains_key("file") {
-            file_filter_c = Regex::new(parent_filter.get("file").unwrap().as_str()).unwrap();
-        }
-        let mut func_filter_c = Regex::new(".").unwrap(); //any
-        if parent_filter.contains_key("function") {
-            func_filter_c = Regex::new(parent_filter.get("function").unwrap().as_str()).unwrap();
-        }
-
-        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-        match doc_symbol {
-            Some(DocumentSymbolResponse::Flat(_)) => {
-                log!(Level::Warn ,"unsupported symbols found");
-            }
-            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                for symbol in doc_symbols {
-                    if symbol.kind == SymbolKind::FUNCTION {
-                        let func_name = symbol.name.clone();
-                        if func_filter.is_match(func_name.as_str()) {
-                            let mut prep_call_hierarchy = self
-                                .lang_server
-                                .call_hierarchy_item(&document, symbol.range.start);
-                            let mut call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                            if call_hierarchy_array.len() == 0 {
-                                let mut i = 0;
-                                self.restart_server();
-                                for doc in self.index_map.clone() {
-                                    let file_path = doc.0;
-                                    let path = self.project_path.clone() + "/" + file_path.as_str();
-                                    let mut file = match File::open(&path) {
-                                        Err(why) => panic!("could not open: {}", why),
-                                        Ok(file) => file,
-                                    };
-                                    let mut s = String::new();
-                                    match file.read_to_string(&mut s) {
-                                        Err(why) => panic!("could not read: {}", why),
-                                        Ok(_) => {}
+                        Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                            for symbol in doc_symbols {
+                                if symbol.kind == SymbolKind::FUNCTION {
+                                    let mut func_name = symbol.name;
+                                    while func_name.starts_with('_') {
+                                        func_name = func_name.strip_prefix(&"_".to_string()).unwrap().to_string();
                                     }
-
-                                    let filter_str = (func_filter.to_string().clone() + "(").clone();
-                                    if s.contains(&filter_str) {
-                                        i += 1;
-                                        if i >= 5 {
-                                            i = 0;
-                                            self.restart_server();
-                                        }
-                                        let search_document_resp = self.lang_server.document_open(&file_path.as_str()).unwrap();
-                                        let search_doc_symbol = self.lang_server.document_symbol(&search_document_resp).unwrap();
-                                        let search_nested_symbol = search_doc_symbol.unwrap();
-                                        match search_nested_symbol {
-                                            DocumentSymbolResponse::Flat(_) => {
-                                                log!(Level::Warn ,"unsupported symbols found");
-                                            }
-                                            DocumentSymbolResponse::Nested(search_symbols) => {
-                                                let doc_lines: Vec<&str> = s.split("\n").collect();
-                                                let mut j:u32 = 0;
-                                                while (j as usize) < doc_lines.len() {
-                                                    if doc_lines[(j as usize)].contains(&filter_str) {
-                                                        for search_symbol in search_symbols.clone() {
-                                                            if search_symbol.range.start.line + 1 <= j && j <= search_symbol.range.end.line {
-                                                                result.insert((search_symbol.name.clone(), symbol.name.clone()));
-                                                            }
+                                    if func_name == parent {
+                                        let mut unsuccessful_response;
+                                        if self.use_call_hierarchy_outgoing {
+                                            let prep_call_hierarchy = self
+                                                .lang_server
+                                                .call_hierarchy_item(&document, symbol.range.start);
+                                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
+                                            unsuccessful_response = true;
+                                            for call_hierarchy_item in call_hierarchy_array {
+                                                let outgoing_calls = self
+                                                    .lang_server
+                                                    .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
+                                                if outgoing_calls.is_ok() {
+                                                    unsuccessful_response = true;
+                                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
+                                                        unsuccessful_response = false;
+                                                        if outgoing_call.to.kind == SymbolKind::FUNCTION {
+                                                                children.insert(outgoing_call.to.name.clone());
                                                         }
-
                                                     }
-                                                    j += 1;
+                                                } else {
+                                                    unsuccessful_response = true;
+                                                    self.use_call_hierarchy_outgoing = false;
+                                                }
+                                            }
+                                        } else {
+                                            unsuccessful_response = true;
+                                        }
+                                        if unsuccessful_response {
+                                            let doc_text = document.text.clone();
+                                            let doc_lines: Vec<&str> = doc_text.split("\n").collect();
+                                            let start: usize = (symbol.range.start.line + 1) as usize;
+                                            let end: usize = symbol.range.end.line as usize;
+                                            if start < end {
+                                                let function_data = doc_lines[start..end].concat();
+                                                for child in child_name.clone() {
+                                                    let search_name = child.clone() + "(";
+                                                    if function_data.contains(&search_name) {
+                                                        children.insert(child);
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            for call_hierarchy_item in call_hierarchy_array {
-                                let incoming_calls = self
-                                    .lang_server
-                                    .call_hierarchy_item_incoming(call_hierarchy_item.clone());
-                                for incoming_call in incoming_calls.unwrap().unwrap() {
-                                    if func_filter_c.is_match(incoming_call.from.name.as_str())
-                                        && file_filter_c.is_match(incoming_call.from.uri.as_str())
-                                    {
-                                        if incoming_call.from.kind == SymbolKind::FUNCTION {
-                                            result.insert((
-                                                incoming_call.from.name.to_string(),
-                                                func_name.clone(),
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
+                        }
+                        None => {
+                            log!(Level::Warn, "no symbols found");
+                        }
+                    }
+
+                    for child in children{
+                        if child_name.contains(&child) {
+                            connections.insert((parent.clone(), child.clone()));
                         }
                     }
                 }
-            }
-            None => {
-                log!(Level::Warn, "no symbols found");
-            }
-        }
 
-        result
-    }
 
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
-        let children = self.search_child_single_document_filter(
-            Regex::new(parent_name.as_str()).unwrap(),
-            HashMap::new(),
-            document_name
-        );
-
-        for child in children {
-            if child.1 == child_name {
-                return true
             }
         }
-        false
-    }
-
-    fn find_functions_in_doc(
-        &mut self,
-        func_filter: Regex,
-        ident: Option<String>,
-        document_name: &str,
-    ) -> HashSet<String> {
-        let mut result = HashSet::new();
-        let document_res = self.lang_server.document_open(document_name);
-        if document_res.is_ok() {
-            let document = document_res.unwrap();
-
-            let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-            match doc_symbol {
-                Some(DocumentSymbolResponse::Flat(_)) => {
-                    log!(Level::Warn ,"unsupported symbols found");
-                }
-                Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                    for symbol in doc_symbols {
-                        if symbol.kind == SymbolKind::FUNCTION {
-                            let func_name = symbol.name;
-                            if ident.clone().is_some() {
-                                if func_name == ident.clone().unwrap() {
-                                    result.insert(func_name.to_string());
-
-                                }
-                            } else {
-                                if func_filter.is_match(func_name.as_str()) {
-                                    result.insert(func_name.to_string());
-
-                                }
-                            }
-                        }
-                    }
-                }
-                None => {
-                    log!(Level::Warn, "no symbols found");
-                }
-            }
-        }
-        result
+        connections
     }
 
     fn close(&mut self){

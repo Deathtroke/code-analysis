@@ -16,34 +16,26 @@ impl LSPServer for MockLSPServer {
         unimplemented!();
     }
 
-    fn search_connection_filter(
-        &mut self,
-        parent_filter: String,
-        child_filter: String,
-    ) -> HashSet<(String, String)> {
-        let mut result: HashSet<(String, String)> = HashSet::new();
-
-        if parent_filter.as_str() == "" {
-            result.insert(("parent1".to_string(), child_filter.clone()));
-            result.insert(("parent2".to_string(), child_filter.clone()));
-        }
-        else {
-            result.insert((parent_filter.clone(), "child1".to_string()));
-            result.insert((parent_filter.clone(), "child2".to_string()));
-        }
-
-        result
-    }
-
     fn find_func_name(
         &mut self,
         filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode> {
         let mut result: HashSet<FunctionNode> = HashSet::new();
+        if filter.len() == 0 {
+            let forced = ForcedNode {
+                function_name: HashSet::from(["parent1".to_string(),"parent2".to_string(),"child1".to_string(), "child2".to_string()]),
+                document: "".to_string()
+            };
+            result.insert(FunctionNode {
+                function_name: forced.function_name.clone(),
+                document: forced.document.clone(),
+                match_strategy: Box::new(forced)
+            });
+        }
         for f in filter {
             if f.contains_key(&FilterName::Function) {
                 let forced = ForcedNode {
-                    function_name: f.get(&FilterName::Function).unwrap().clone().as_str().to_string(),
+                    function_name: HashSet::from(["parent1".to_string(),"parent2".to_string()]),
                     document: "".to_string()
                 };
                 result.insert(FunctionNode {
@@ -54,7 +46,7 @@ impl LSPServer for MockLSPServer {
             }
             if f.contains_key(&FilterName::FunctionNameFromIdent) {
                 let forced = ForcedNode {
-                    function_name: f.get(&FilterName::FunctionNameFromIdent).unwrap().clone().as_str().to_string(),
+                    function_name: HashSet::from([f.get(&FilterName::FunctionNameFromIdent).unwrap().clone().as_str().to_string()]),
                     document: "".to_string()
                 };
                 result.insert(FunctionNode {
@@ -67,45 +59,8 @@ impl LSPServer for MockLSPServer {
         result
     }
 
-    fn search_child_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        child_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)> {
-        if false {unimplemented!("{:?} {:?}", child_filter, document_name)}
-        let children: HashSet<(String,String)> =
-            HashSet::from([(func_filter.to_string(), "child1".to_string()), (func_filter.to_string(), "child2".to_string())]);
-
-        children
-    }
-
-    fn search_parent_single_document_filter(
-        &mut self,
-        func_filter: Regex,
-        parent_filter: HashMap<String, String>,
-        document_name: &str,
-    ) -> HashSet<(String, String)> {
-        if false {unimplemented!("{:?} {:?}", parent_filter, document_name)}
-        let parents: HashSet<(String,String)> =
-            HashSet::from([("parent1".to_string(), func_filter.to_string()), ("parent2".to_string(), func_filter.to_string())]);
-
-        parents
-    }
-
-    fn find_link(&mut self, parent_name: String, child_name: String, document_name: &str) -> bool {
-        if false {unimplemented!("{:?}, {:?}, {:?}", parent_name, child_name, document_name)}
-
-        true
-    }
-
-    fn find_functions_in_doc(
-        &mut self,
-        func_filter: Regex,
-        ident: Option<String>,
-        document_name: &str,
-    ) -> HashSet<String> {
-        unimplemented!("{:?}, {:?}, {:?}", func_filter, document_name, ident)
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)> {
+        unimplemented!("{:?} {:?} {:?} {:?}", parent_name, child_name, document_name_parent, document_name_child);
     }
 
     fn close(&mut self) {
@@ -124,20 +79,6 @@ fn test_parser_simple1() {
         ("parent2".to_string(), "func".to_string()),
     ]);
 
-    assert_eq!(parser.graph.graph_to_tuple(), graph_output);
-}
-
-#[test]
-fn test_parser_simple2() {
-    let input = r#"@func {}"#;
-    let mut parser = Analyzer::new( MockLSPServer::new());
-
-    parser.parse(input);
-
-    let graph_output = HashSet::from([
-        ("func".to_string(), "child1".to_string()),
-        ("func".to_string(), "child2".to_string()),
-    ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
 }
 

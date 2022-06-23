@@ -3,6 +3,13 @@ use petgraph::graph::NodeIndex;
 
 pub struct Graph {
     pub pet_graph: petgraph::Graph<String, ()>,
+    pub(crate) nodes: HashSet<Node>,
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct Node {
+    pub name: String,
+    pub priority: u32,
 }
 
 impl Graph {
@@ -18,30 +25,48 @@ impl Graph {
         result
     }
 
-    pub fn add_node(&mut self, node_name: String) -> NodeIndex {
-        let mut result_index = NodeIndex::new(0);
+    pub fn add_node(&mut self, node_name: String, prio: u32) {
         let mut node_exists = false;
         for node in self.pet_graph.node_indices(){
             if self.pet_graph.node_weight(node).unwrap().to_owned() == node_name {
-                result_index = node;
                 node_exists = true;
             }
         }
         if !node_exists {
-            result_index = self.pet_graph.add_node(node_name);
+            self.pet_graph.add_node(node_name.clone());
+            let node = Node{name: node_name.clone(), priority: prio};
+            self.nodes.insert(node);
         }
-        result_index
     }
 
-    pub fn add_edge(&mut self, start: NodeIndex, end : NodeIndex) {
-        let mut node_exists = false;
-        for node in self.pet_graph.edge_indices(){
-            if self.pet_graph.contains_edge(start, end) {
-                node_exists = true;
+    pub fn add_edge(&mut self, start: String, end : String) {
+        let mut edge_exists = false;
+        let mut start_node: NodeIndex = NodeIndex::new(0);
+        let mut end_node: NodeIndex = NodeIndex::new(0);
+        for node in self.pet_graph.node_indices(){
+            if self.pet_graph.node_weight(node).is_some() {
+                let node_name = self.pet_graph.node_weight(node).unwrap().clone();
+                if node_name == start {
+                    start_node = node;
+                }
+                if node_name == end {
+                    end_node = node;
+                }
             }
         }
-        if !node_exists {
-            self.pet_graph.add_edge(start, end, ());
+        if self.pet_graph.contains_edge(start_node, end_node) {
+            edge_exists = true;
+        }
+        if !edge_exists {
+            self.pet_graph.add_edge(start_node, end_node, ());
+            for node in self.nodes.clone() {
+                if (node.name == start.clone()) || (node.name == end.clone()) {
+                    let new_prio = node.priority + 1;
+                    let new_node = Node{name: node.name.clone(), priority: new_prio};
+                    self.nodes.remove(&node.clone());
+                    self.nodes.insert(new_node);
+                }
+            }
         }
     }
 
