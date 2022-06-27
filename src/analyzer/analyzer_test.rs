@@ -24,11 +24,9 @@ impl LSPServer for MockLSPServer {
         if filter.len() == 0 {
             let forced = ForcedNode {
                 function_name: HashSet::from(["parent1".to_string(),"parent2".to_string(),"child1".to_string(), "child2".to_string()]),
-                document: "".to_string()
             };
             result.insert(FunctionNode {
                 function_name: forced.function_name.clone(),
-                document: forced.document.clone(),
                 match_strategy: Box::new(forced)
             });
         }
@@ -36,22 +34,18 @@ impl LSPServer for MockLSPServer {
             if f.contains_key(&FilterName::Function) {
                 let forced = ForcedNode {
                     function_name: HashSet::from(["parent1".to_string(),"parent2".to_string()]),
-                    document: "".to_string()
                 };
                 result.insert(FunctionNode {
                     function_name: forced.function_name.clone(),
-                    document: forced.document.clone(),
                     match_strategy: Box::new(forced)
                 });
             }
             if f.contains_key(&FilterName::FunctionNameFromIdent) {
                 let forced = ForcedNode {
                     function_name: HashSet::from([f.get(&FilterName::FunctionNameFromIdent).unwrap().clone().as_str().to_string()]),
-                    document: "".to_string()
                 };
                 result.insert(FunctionNode {
                     function_name: forced.function_name.clone(),
-                    document: forced.document.clone(),
                     match_strategy: Box::new(forced)
                 });
             }
@@ -59,8 +53,8 @@ impl LSPServer for MockLSPServer {
         result
     }
 
-    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)> {
-        unimplemented!("{:?} {:?} {:?} {:?}", parent_name, child_name, document_name_parent, document_name_child);
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>) -> HashSet<(String, String)> {
+        unimplemented!("{:?} {:?}", parent_name, child_name);
     }
 
     fn close(&mut self) {
