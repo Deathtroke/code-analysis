@@ -1,6 +1,6 @@
 use crate::lang_server::LanguageServer;
 use crate::lang_server;
-use lsp_types::{DocumentSymbolResponse, SymbolKind};
+use lsp_types::{DocumentSymbolResponse, Range, SymbolKind};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -17,7 +17,7 @@ pub trait LSPServer {
         &mut self,
         filter: Vec<HashMap<FilterName, Regex>>,
     ) -> HashSet<FunctionNode>;
-    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)>;
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>) -> HashSet<(String, String)>;
     fn close(&mut self);
 }
 
@@ -25,13 +25,14 @@ pub struct ClangdServer {
     pub lang_server: Box<dyn LanguageServer>,
     pub project_path: String,
     pub index_map: HashMap<String, Vec<String>>,
+    function_index: HashMap<String, Vec<String>>,
+    inv_function_index: HashMap<String, Vec<String>>,
     use_call_hierarchy_outgoing: bool,
     clangd_path: String,
 }
 
 pub struct FunctionNode {
     pub function_name: HashSet<String>,
-    pub document: String,
     pub match_strategy: Box<dyn MatchFunctionEdge>
 }
 
@@ -40,13 +41,12 @@ impl Hash for FunctionNode {
         for function in &self.function_name {
             function.hash(state);
         }
-        self.document.hash(state);
     }
 }
 
 impl PartialEq for FunctionNode {
     fn eq(&self, other: &Self) -> bool {
-        self.document == other.document && self.function_name == other.function_name
+        self.function_name == other.function_name
     }
 }
 
@@ -56,19 +56,17 @@ impl Clone for FunctionNode {
     fn clone(&self) -> Self {
         match self.match_strategy.get_implementation().as_str() {
             "ForcedEdge" => {
-                let strategy = ForcedNode { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ForcedNode { function_name: self.function_name.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
-                    document: self.document.clone(),
                     match_strategy: Box::new(strategy),
                 }
 
             }
             "ParentChildEdge" => {
-                let strategy = ParentChildNode { function_name: self.function_name.clone(), document: self.document.clone() };
+                let strategy = ParentChildNode { function_name: self.function_name.clone() };
                 FunctionNode{
                     function_name: self.function_name.clone(),
-                    document: self.document.clone(),
                     match_strategy: Box::new(strategy),
                 }
             }
@@ -85,12 +83,10 @@ pub trait MatchFunctionEdge {
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ForcedNode {
     pub function_name: HashSet<String>,
-    pub document: String,
 }
 
 pub struct ParentChildNode {
     pub function_name: HashSet<String>,
-    pub document: String,
 }
 
 impl MatchFunctionEdge for ForcedNode {
@@ -116,8 +112,6 @@ impl MatchFunctionEdge for ParentChildNode {
         lsp_server.find_link(
             self.function_name.clone(),
             match_target.function_name.clone(),
-            self.document.as_str(),
-            match_target.document.as_str()
         )
     }
     fn get_implementation(&self) -> String{
@@ -136,6 +130,8 @@ impl ClangdServer {
                 .expect("Failed to spawn clangd"),
             project_path,
             index_map: HashMap::new(),
+            function_index: Default::default(),
+            inv_function_index: Default::default(),
             use_call_hierarchy_outgoing: true,
             clangd_path
         };
@@ -190,6 +186,7 @@ impl ClangdServer {
 
     fn check_index_file(&mut self, files: Vec<String>) -> HashMap<String, Vec<String>> {
         let mut index_map : HashMap<String, Vec<String>> = HashMap::new();
+        let mut range_index: HashMap<String, Vec<Range>> = HashMap::new();
 
         let path = self.project_path.clone() + "/.cache/index.json";
         let mut needs_indexing = false;
@@ -205,6 +202,7 @@ impl ClangdServer {
 
             let json = serde_json::from_str::<Value>(s.as_str());
             if json.is_err() {
+
                 needs_indexing = true;
             } else {
                 let json_map = json.unwrap().as_object().unwrap().to_owned();
@@ -218,6 +216,7 @@ impl ClangdServer {
                             }
                             index_map.insert(file.0, functions.clone());
                         } else {
+
                             needs_indexing = true;
                         }
                     }
@@ -227,6 +226,69 @@ impl ClangdServer {
             }
 
         }
+
+        let file2 =  File::open(self.project_path.clone() + "/.cache/called.json");
+        if file2.is_err() {
+            needs_indexing = true;
+        } else {
+            let mut s = String::new();
+            match file2.unwrap().read_to_string(&mut s) {
+                Err(why) => panic!("could not read: {}", why),
+                Ok(_) => {}
+            }
+
+            let json2 = serde_json::from_str::<Value>(s.as_str());
+            if json2.is_err() {
+                needs_indexing = true;
+            } else {
+                let json_map = json2.unwrap().as_object().unwrap().to_owned();
+                if json_map.len() > 1 {
+                    for file in json_map{
+                        let mut functions: Vec<String> = vec![];
+                        let symbols = file.1.as_array().unwrap().to_owned();
+                        for symbol in symbols {
+                            functions.push(symbol.to_string().replace("\"", ""));
+                        }
+                        self.function_index.insert(file.0, functions.clone());
+                    }
+                } else {
+                    needs_indexing = true;
+                }
+            }
+
+        }
+        let file3 =  File::open(self.project_path.clone() + "/.cache/caller.json");
+        if file3.is_err() {
+            needs_indexing = true;
+        } else {
+            let mut s = String::new();
+            match file3.unwrap().read_to_string(&mut s) {
+                Err(why) => panic!("could not read: {}", why),
+                Ok(_) => {}
+            }
+
+            let json3 = serde_json::from_str::<Value>(s.as_str());
+            if json3.is_err() {
+                needs_indexing = true;
+            } else {
+                let json_map = json3.unwrap().as_object().unwrap().to_owned();
+                if json_map.len() > 1 {
+                    for file in json_map{
+                        let mut functions: Vec<String> = vec![];
+                        let symbols = file.1.as_array().unwrap().to_owned();
+                        for symbol in symbols {
+                            functions.push(symbol.to_string().replace("\"", ""));
+                        }
+                        self.inv_function_index.insert(file.0, functions.clone());
+                    }
+                } else {
+                    needs_indexing = true;
+                }
+            }
+
+        }
+
+
         if needs_indexing {
             let mut i = 0;
             let mut i_total = 0;
@@ -234,6 +296,7 @@ impl ClangdServer {
             for file in files.clone() {
                 i += 1; i_total += 1;
                 let mut functions:Vec<String> = vec![];
+                let mut ranges: Vec<Range> = vec![];
 
                 if i >= 10 {
                     //break;
@@ -259,6 +322,7 @@ impl ClangdServer {
                                         }
 
                                         functions.push(func_name);
+                                        ranges.push(symbol.range.clone());
                                     }
                                 }
                             }
@@ -268,12 +332,77 @@ impl ClangdServer {
                         }
                     }
                 }
-                index_map.insert(file, functions);
+                index_map.insert(file.clone(), functions);
+                range_index.insert(file.clone(), ranges);
             }
 
             let new_json = serde_json::to_string(&index_map).unwrap();
             let mut file_ref = File::create(path).expect("create failed");
             file_ref.write_all(new_json.as_bytes()).expect("write failed");
+
+            eprintln!("Done Step 1. Now indexing all the function calls. Please wait a little further");
+            let mut i = 0;
+            for document in index_map.clone() {
+                i += 1;
+                if i % 25 == 0 {
+                    eprintln!("indexing functions, please wait ({}%)", i*100/index_map.len());
+
+                }
+                let ranges = range_index.get(document.0.clone().as_str()).unwrap().to_owned();
+                let functions = document.1.clone();
+                let max = ranges.len();
+                for i in 0..max {
+                    let name = functions[i].clone();
+                    let range = ranges[i].clone();
+                    let mut called_functions = Vec::new();
+
+                    let doc_path = self.project_path.clone() + "/" + document.0.clone().as_str();
+                    let file =  File::open(&doc_path);
+                    if file.is_err() {
+                        needs_indexing = true;
+                    } else {
+                        let mut s = String::new();
+                        match file.unwrap().read_to_string(&mut s) {
+                            Err(why) => panic!("could not read: {}", why),
+                            Ok(_) => {}
+                        }
+                        let doc_lines: Vec<&str> = s.split("\n").collect();
+                        let start: usize = (range.start.line + 1) as usize;
+                        let end: usize = range.end.line as usize;
+                        if start < end {
+                            let function_data = doc_lines[start..end].concat();
+                            for doc_2 in index_map.clone() {
+                                let func_names = doc_2.1;
+                                for func_name in func_names {
+                                    let search_name = func_name.clone() + "(";
+                                    if function_data.contains(&search_name) {
+                                        called_functions.push(func_name.clone());
+                                        let mut caller_function: Vec<String> = Vec::new();
+                                        if self.inv_function_index.contains_key(func_name.clone().as_str()) {
+                                            caller_function = self.inv_function_index.get(func_name.clone().as_str()).unwrap().to_owned();
+                                        }
+                                        caller_function.push(name.clone());
+                                        self.inv_function_index.insert(func_name.clone(), caller_function.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    self.function_index.insert(name, called_functions);
+                }
+            }
+
+
+            let new_json2 = serde_json::to_string(&self.function_index).unwrap();
+            let mut file_ref2 = File::create(self.project_path.clone() + "/.cache/called.json").expect("create failed");
+            file_ref2.write_all(new_json2.as_bytes()).expect("write failed");
+            let new_json3 = serde_json::to_string(&self.inv_function_index).unwrap();
+            let mut file_ref3 = File::create(self.project_path.clone() + "/.cache/caller.json").expect("create failed");
+            file_ref3.write_all(new_json3.as_bytes()).expect("write failed");
+
+        }
+        else {
+            //eprintln!("done loading index files");
         }
         index_map
     }
@@ -354,10 +483,11 @@ impl LSPServer for ClangdServer {
                 function_filter = regex.to_owned();
             }
 
+            let mut function_names: HashSet<String> = HashSet::new();
+
             for document in self.index_map.clone() {
                 let file = document.0;
                 if file_filter.is_match(file.as_str()) {
-                    let mut function_names: HashSet<String> = HashSet::new();
                     for function in document.1.clone() {
                         let mut found = false;
                         if only_ident == true {
@@ -373,21 +503,19 @@ impl LSPServer for ClangdServer {
                             function_names.insert(function.clone());
                         }
                     }
-                    if function_names.len() > 0 {
-                        if forced {
-                            let node = ForcedNode {
-                                function_name: function_names.clone(),
-                                document: file.clone(),
-                            };
-                            func_nodes.insert(FunctionNode { function_name: function_names.clone(), document: file.clone(), match_strategy: Box::new(node) });
-                        } else {
-                            let node = ParentChildNode {
-                                function_name: function_names.clone(),
-                                document: file.clone()
-                            };
-                            func_nodes.insert(FunctionNode { function_name: function_names.clone(), document: file.clone(), match_strategy: Box::new(node) });
-                        }
-                    }
+                }
+            }
+            if function_names.len() > 0 {
+                if forced {
+                    let node = ForcedNode {
+                        function_name: function_names.clone(),
+                    };
+                    func_nodes.insert(FunctionNode { function_name: function_names.clone(), match_strategy: Box::new(node) });
+                } else {
+                    let node = ParentChildNode {
+                        function_name: function_names.clone(),
+                    };
+                    func_nodes.insert(FunctionNode { function_name: function_names.clone(), match_strategy: Box::new(node) });
                 }
             }
 
@@ -396,9 +524,8 @@ impl LSPServer for ClangdServer {
                 hash_set.insert(function_filter.as_str().to_string());
                 let node = ParentChildNode {
                     function_name: hash_set,
-                    document: "not found".to_string()
                 };
-                func_nodes.insert(FunctionNode{function_name: node.function_name.clone(), document: "not found".to_string(), match_strategy: Box::new(node)});
+                func_nodes.insert(FunctionNode{function_name: node.function_name.clone(), match_strategy: Box::new(node)});
 
             }
         }
@@ -406,215 +533,34 @@ impl LSPServer for ClangdServer {
         func_nodes
     }
 
-    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>, document_name_parent: &str, document_name_child: &str) -> HashSet<(String, String)> {
-        //println!("{:?} -> {:?} @{}", parent_name, child_name, document_name_parent);
+    fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>) -> HashSet<(String, String)> {
+        //println!("{:?} -> {:?}", parent_name, child_name);
         let mut connections : HashSet<(String, String)> = HashSet::new();
-
-        let mut need_lsp = true;
-
 
 
         if parent_name.len() > child_name.len() {
             for child in child_name{
-
-                    let path = self.project_path.clone() + "/" + document_name_child;
-
-                    let file = File::open(&path);
-                    if file.is_ok() {
-                        let mut s = String::new();
-                        match file.unwrap().read_to_string(&mut s) {
-                            Err(why) => panic!("could not read: {}", why),
-                            Ok(_) => {}
+                if self.inv_function_index.contains_key(child.clone().as_str()){
+                    let caller_names = self.inv_function_index.get(child.clone().as_str()).unwrap().to_owned();
+                    for name in caller_names {
+                        if parent_name.contains(name.clone().as_str()){
+                            let p_name = parent_name.get(name.clone().as_str()).unwrap().to_owned();
+                            connections.insert((p_name.clone(),child.clone()));
                         }
-                        need_lsp = s.contains(&child);
-                    }
-                    if need_lsp {
-                        let mut parents: HashSet<String> = HashSet::new();
-
-                        let document = self.lang_server.document_open(document_name_child).unwrap();
-
-                        let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-                        match doc_symbol {
-                            Some(DocumentSymbolResponse::Flat(token)) => {
-                                log!(Level::Warn ,"unsupported symbols found {:?}", token);
-                            }
-                            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                                for symbol in doc_symbols {
-                                    if symbol.kind == SymbolKind::FUNCTION {
-                                        let mut func_name = symbol.name;
-                                        while func_name.starts_with('_') {
-                                            func_name = func_name.strip_prefix(&"_".to_string()).unwrap().to_string();
-                                        }
-                                        if func_name == child {
-                                            let prep_call_hierarchy = self
-                                                .lang_server
-                                                .call_hierarchy_item(&document, symbol.range.start);
-                                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                                            if call_hierarchy_array.len() == 0 {
-                                                let mut i = 0;
-                                                self.restart_server();
-                                                let path2 = self.project_path.clone() + "/" + document_name_parent;
-                                                let file2 = File::open(&path2);
-                                                if file2.is_ok() {
-                                                    let mut s2 = String::new();
-                                                    match file2.unwrap().read_to_string(&mut s2) {
-                                                        Err(why) => panic!("could not read: {}", why),
-                                                        Ok(_) => {}
-                                                    }
-
-                                                    let filter_str = (child.clone() + "(").clone();
-                                                    if s2.contains(&filter_str) {
-                                                        i += 1;
-                                                        if i >= 5 {
-                                                            i = 0;
-                                                            self.restart_server();
-                                                        }
-                                                        let search_document_resp = self.lang_server.document_open(&document_name_parent).unwrap();
-                                                        let search_doc_symbol = self.lang_server.document_symbol(&search_document_resp).unwrap();
-                                                        let search_nested_symbol = search_doc_symbol.unwrap();
-                                                        match search_nested_symbol {
-                                                            DocumentSymbolResponse::Flat(_) => {
-                                                                log!(Level::Warn ,"unsupported symbols found");
-                                                            }
-                                                            DocumentSymbolResponse::Nested(search_symbols) => {
-                                                                let doc_lines: Vec<&str> = s2.split("\n").collect();
-                                                                let mut j: u32 = 0;
-                                                                while (j as usize) < doc_lines.len() {
-                                                                    if doc_lines[(j as usize)].contains(&filter_str) {
-                                                                        for search_symbol in search_symbols.clone() {
-                                                                            if search_symbol.range.start.line < j && j <= search_symbol.range.end.line {
-                                                                                parents.insert(search_symbol.name.clone());
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                    j += 1;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            for call_hierarchy_item in call_hierarchy_array {
-                                                let outgoing_calls = self
-                                                    .lang_server
-                                                    .call_hierarchy_item_incoming(call_hierarchy_item.clone());
-                                                if outgoing_calls.is_ok() {
-                                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                                        if outgoing_call.from.kind == SymbolKind::FUNCTION {
-                                                            parents.insert(outgoing_call.from.name.clone());
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            None => {
-                                log!(Level::Warn, "no symbols found");
-                            }
-                        }
-                        for parent in parents {
-                            if parent_name.contains(&parent) {
-                                connections.insert((parent.clone(), child.clone()));
-                            }
-
                     }
                 }
             }
         } else {
             for parent in parent_name {
-                let path = self.project_path.clone() + "/" + document_name_parent;
-
-                let file = File::open(&path);
-                if file.is_ok() {
-                    let mut s = String::new();
-                    match file.unwrap().read_to_string(&mut s) {
-                        Err(why) => panic!("could not read: {}", why),
-                        Ok(_) => {}
-                    }
-                    need_lsp = s.contains(&parent);
-                }
-
-                if need_lsp {
-                    let mut children: HashSet<String> = HashSet::new();
-
-                    let document = self.lang_server.document_open(document_name_parent).unwrap();
-
-                    let doc_symbol = self.lang_server.document_symbol(&document).unwrap();
-
-                    match doc_symbol {
-                        Some(DocumentSymbolResponse::Flat(token)) => {
-                            log!(Level::Warn ,"unsupported symbols found {:?}", token);
-                        }
-                        Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
-                            for symbol in doc_symbols {
-                                if symbol.kind == SymbolKind::FUNCTION {
-                                    let mut func_name = symbol.name;
-                                    while func_name.starts_with('_') {
-                                        func_name = func_name.strip_prefix(&"_".to_string()).unwrap().to_string();
-                                    }
-                                    if func_name == parent {
-                                        let mut unsuccessful_response;
-                                        if self.use_call_hierarchy_outgoing {
-                                            let prep_call_hierarchy = self
-                                                .lang_server
-                                                .call_hierarchy_item(&document, symbol.range.start);
-                                            let call_hierarchy_array = prep_call_hierarchy.unwrap().unwrap();
-                                            unsuccessful_response = true;
-                                            for call_hierarchy_item in call_hierarchy_array {
-                                                let outgoing_calls = self
-                                                    .lang_server
-                                                    .call_hierarchy_item_outgoing(call_hierarchy_item.clone());
-                                                if outgoing_calls.is_ok() {
-                                                    unsuccessful_response = true;
-                                                    for outgoing_call in outgoing_calls.unwrap().unwrap() {
-                                                        unsuccessful_response = false;
-                                                        if outgoing_call.to.kind == SymbolKind::FUNCTION {
-                                                                children.insert(outgoing_call.to.name.clone());
-                                                        }
-                                                    }
-                                                } else {
-                                                    unsuccessful_response = true;
-                                                    self.use_call_hierarchy_outgoing = false;
-                                                }
-                                            }
-                                        } else {
-                                            unsuccessful_response = true;
-                                        }
-                                        if unsuccessful_response {
-                                            let doc_text = document.text.clone();
-                                            let doc_lines: Vec<&str> = doc_text.split("\n").collect();
-                                            let start: usize = (symbol.range.start.line + 1) as usize;
-                                            let end: usize = symbol.range.end.line as usize;
-                                            if start < end {
-                                                let function_data = doc_lines[start..end].concat();
-                                                for child in child_name.clone() {
-                                                    let search_name = child.clone() + "(";
-                                                    if function_data.contains(&search_name) {
-                                                        children.insert(child);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        None => {
-                            log!(Level::Warn, "no symbols found");
-                        }
-                    }
-
-                    for child in children{
-                        if child_name.contains(&child) {
-                            connections.insert((parent.clone(), child.clone()));
+                if self.function_index.contains_key(parent.clone().as_str()){
+                    let called_names = self.function_index.get(parent.clone().as_str()).unwrap().to_owned();
+                    for name in called_names {
+                        if child_name.contains(name.clone().as_str()){
+                            let c_name = child_name.get(name.clone().as_str()).unwrap().to_owned();
+                            connections.insert((parent.clone(),c_name.clone()));
                         }
                     }
                 }
-
-
             }
         }
         connections

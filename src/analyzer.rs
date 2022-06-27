@@ -95,23 +95,21 @@ impl Analyzer {
             if child_names.to_owned().len() == 0 {
                 let node = ParentChildNode {
                     function_name: HashSet::from([1.to_string()]),
-                    document: "NONE".to_string()
                 };
                 return HashSet::from(
-                    [FunctionNode { function_name: HashSet::from([1.to_string()]), document: "NONE".to_string(), match_strategy: Box::new(node) }]
+                    [FunctionNode { function_name: HashSet::from([1.to_string()]), match_strategy: Box::new(node) }]
                 );
             }
             else if child_names.to_owned().len() == 1 {
                 let child = child_names.iter().last().unwrap().to_owned();
                 if child.function_name.len() == 1 {
                     let count = child.function_name.iter().last().unwrap().to_owned();
-                    if child.document == "NONE" && count.as_str().parse::<i32>().is_ok() {
+                    if count.as_str().parse::<i32>().is_ok() {
                         let i = count.as_str().parse::<i32>().unwrap() + 1;
                         let node = ParentChildNode {
                             function_name: HashSet::from([i.to_string()]),
-                            document: "NONE".to_string()
                         };
-                        return HashSet::from([FunctionNode { function_name: HashSet::from([i.to_string()]), document: "NONE".to_string(), match_strategy: Box::new(node) }]);
+                        return HashSet::from([FunctionNode { function_name: HashSet::from([i.to_string()]), match_strategy: Box::new(node) }]);
                     }
                 }
             }
@@ -122,7 +120,7 @@ impl Analyzer {
         if child_names.len() == 1 {
             let child=child_names.clone().iter().last().unwrap().to_owned();
             for function_name in child.clone().function_name{
-                if function_name.as_str().parse::<i32>().is_ok() && child.document == "NONE" {
+                if function_name.as_str().parse::<i32>().is_ok() {
                     search_grandparents = function_name.as_str().parse::<i32>().unwrap();
                     child_names.remove(&child);
                 }
