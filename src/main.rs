@@ -3,6 +3,7 @@ use lsp_types::notification::{DidOpenTextDocument, Exit, Initialized};
 use lsp_types::request::Request as LspRequest;
 use lsp_types::request::{DocumentSymbolRequest, Initialize, Shutdown};
 use lsp_types::*;
+use chrono::*;
 
 use structopt;
 use structopt::StructOpt;
@@ -24,6 +25,8 @@ pub struct Opt {
     project_path: String,
     #[structopt(short = "l", long = "lsp-path", default_value = "/usr/bin/clangd")]
     lsp_path: String,
+    #[structopt(short = "b", long = "benchmark")]
+    benchmark: bool,
 }
 
 fn main() {
@@ -37,13 +40,21 @@ fn main() {
 }
 
 fn try_main() -> anyhow::Result<()> {
+    let start = Utc::now().time();
+
     let opt = Opt::from_args();
 
     //let lsp_server: searcher::LSPServer = searcher::LSPServer::new(opt.project_path);
-    let lsp_server = searcher::ClangdServer::new(opt.project_path.clone(), opt.lsp_path.clone());
+    let lsp_server = searcher::ClangdServer::new(opt.project_path.clone(), opt.lsp_path.clone(), (start, opt.benchmark));
     let mut parser = analyzer::Analyzer::new(lsp_server);
 
     parser.parse(opt.query.as_str());
+
+    if opt.benchmark {
+        let now = Utc::now().time();
+        let diff = now - start;
+        eprintln!("Time till parsing is finished: {} ms", diff.num_milliseconds());
+    }
 
     let mut out: Box<dyn std::io::Write> = if let Some(filename) = opt.output {
         Box::new(std::fs::File::create(filename)?)

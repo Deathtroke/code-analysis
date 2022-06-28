@@ -7,6 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
+use chrono::Utc;
 use log::{Level, log};
 use serde_json::Value;
 use crate::analyzer::FilterName;
@@ -121,7 +122,7 @@ impl MatchFunctionEdge for ParentChildNode {
 }
 
 impl ClangdServer {
-    pub fn new(project_path: String, clangd_path: String) -> Box<dyn LSPServer> {
+    pub fn new(project_path: String, clangd_path: String, benchmark: (chrono::NaiveTime, bool)) -> Box<dyn LSPServer> {
         let mut lsp_server = Self {
             lang_server: lang_server::LanguageServerLauncher::new()
                 .server(clangd_path.to_owned())
@@ -135,10 +136,15 @@ impl ClangdServer {
             use_call_hierarchy_outgoing: true,
             clangd_path
         };
-        lsp_server.get_all_files_in_project();
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
             log!(Level::Error,"LSP server didn't initialize: {:?}", res.err());
+        }
+        lsp_server.get_all_files_in_project();
+        if benchmark.1 {
+            let now = Utc::now().time();
+            let diff = now - benchmark.0;
+            eprintln!("Time till index is finished: {} ms", diff.num_milliseconds());
         }
         Box::new(lsp_server)
     }
