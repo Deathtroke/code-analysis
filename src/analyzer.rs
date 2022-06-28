@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::string::String;
+use actix_server::new;
 use super::*;
 
 use regex::Regex;
@@ -161,7 +162,7 @@ impl Analyzer {
             let node = ParentChildNode {
                 function_name: child_names_with_parents.clone(),
             };
-            let child_with_parents = FunctionNode { function_name: child_names_with_parents.clone(), match_strategy: Box::new(node) };
+            let mut child_with_parents = FunctionNode { function_name: child_names_with_parents.clone(), match_strategy: Box::new(node) };
 
             while search_grandparents > 0 {
                 let mut new_child_list = HashSet::new();
@@ -180,7 +181,7 @@ impl Analyzer {
                 for grand_child in grand_children {
                     let connections = parent.match_strategy.do_match(grand_child.clone(), &mut self.lang_server);
                     for connection in connections.clone() {
-                        new_child_list.insert(grand_child.clone());
+                        new_child_list.insert(connection.1.clone());
 
                         self.graph.add_node(connection.0.clone(), 1);
                         self.graph.add_node(connection.1.clone(), 1);
@@ -188,8 +189,11 @@ impl Analyzer {
                     }
                 }
 
+                let node = ParentChildNode {
+                    function_name: new_child_list.clone(),
+                };
+                child_with_parents = FunctionNode { function_name: new_child_list.clone(), match_strategy: Box::new(node) };
 
-                child_names = new_child_list;
                 search_grandparents -= 1;
             }
         } else {
