@@ -39,7 +39,7 @@ impl Graph {
         }
     }
 
-    pub fn add_edge(&mut self, start: String, end : String) {
+    pub fn add_edge(&mut self, start: String, end : String) -> bool {
         let mut edge_exists = false;
         let mut start_node: NodeIndex = NodeIndex::new(0);
         let mut end_node: NodeIndex = NodeIndex::new(0);
@@ -68,6 +68,7 @@ impl Graph {
                 }
             }
         }
+        self.pet_graph.neighbors(end_node).next().is_some()
     }
 
     pub fn graph_to_dot(&mut self) -> String {
