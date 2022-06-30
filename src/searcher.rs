@@ -30,6 +30,7 @@ pub struct ClangdServer {
     inv_function_index: HashMap<String, Vec<String>>,
     use_call_hierarchy_outgoing: bool,
     clangd_path: String,
+    benchmark: bool,
 }
 
 pub struct FunctionNode {
@@ -134,7 +135,8 @@ impl ClangdServer {
             function_index: Default::default(),
             inv_function_index: Default::default(),
             use_call_hierarchy_outgoing: true,
-            clangd_path
+            clangd_path,
+            benchmark: benchmark.1
         };
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
@@ -310,10 +312,24 @@ impl ClangdServer {
                     eprintln!("indexing project, please wait ({}/{})", i_total, files.clone().len());
                     self.restart_server();
                 }
+                let start = Utc::now().time();
                 let document_res = self.lang_server.document_open(file.as_str());
+                if self.benchmark {
+                    let finish = Utc::now().time();
+                    let diff = finish-start;
+                    eprintln!("lsp: document_open: {:?}", diff.num_milliseconds());
+                }
                 if document_res.is_ok() {
                     let document = document_res.unwrap();
+
+                    let start = Utc::now().time();
                     let doc_symbol = self.lang_server.document_symbol(&document);
+                    if self.benchmark {
+                        let finish = Utc::now().time();
+                        let diff = finish-start;
+                        eprintln!("lsp: document_symbol: {:?}", diff.num_milliseconds());
+                    }
+
                     if doc_symbol.is_ok() {
                         match doc_symbol.unwrap() {
                             Some(DocumentSymbolResponse::Flat(_)) => {
@@ -340,6 +356,39 @@ impl ClangdServer {
                 }
                 index_map.insert(file.clone(), functions);
                 range_index.insert(file.clone(), ranges);
+            }
+            if self.benchmark {
+                let document_res = self.lang_server.document_open("/criu/fsnotify.c");
+                if document_res.is_ok() {
+                    let document = document_res.unwrap();
+                    let doc_symbol = self.lang_server.document_symbol(&document);
+                    if doc_symbol.is_ok() {
+                        match doc_symbol.unwrap() {
+                            Some(DocumentSymbolResponse::Flat(_)) => {}
+                            Some(DocumentSymbolResponse::Nested(doc_symbols)) => {
+                                let symbol = doc_symbols[6].to_owned();
+                                println!("{:?}", symbol);
+                                let start = Utc::now().time();
+                                let hierarchy_item = self.lang_server.call_hierarchy_item(&document, symbol.range.start).unwrap().unwrap()[0].clone();
+                                let finish = Utc::now().time();
+                                let diff = finish-start;
+                                eprintln!("lsp: call_hierarchy_item: {:?}", diff.num_milliseconds());
+                                let start = Utc::now().time();
+                                self.lang_server.call_hierarchy_item_incoming(hierarchy_item.clone());
+                                let finish = Utc::now().time();
+                                let diff = finish-start;
+                                eprintln!("lsp: call_hierarchy_item_incomming: {:?}", diff.num_milliseconds());
+                                let start = Utc::now().time();
+                                self.lang_server.call_hierarchy_item_outgoing(hierarchy_item);
+                                let finish = Utc::now().time();
+                                let diff = finish-start;
+                                eprintln!("lsp: call_hierarchy_item_outgoing: {:?}", diff.num_milliseconds());
+
+                            }
+                            None => {}
+                        }
+                    }
+                }
             }
 
             let new_json = serde_json::to_string(&index_map).unwrap();
