@@ -55,7 +55,13 @@ impl Analyzer {
         let mut function_names: (HashSet<FunctionNode>, u32) = (HashSet::new(), 0);
 
         for ast in ast_nodes {
-            function_names = self.interpret_statement(ast);
+            let result =  self.interpret_statement(ast);
+            if function_names.1 < result.1 {
+                function_names.1 = result.1
+            }
+            for function in result.0.clone() {
+                function_names.0.insert(function);
+            }
 
         }
         function_names
