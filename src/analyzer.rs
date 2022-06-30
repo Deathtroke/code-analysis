@@ -122,7 +122,7 @@ impl Analyzer {
 
 
             let mut child_names_with_parents: HashSet<String> = HashSet::new();
-            for parent in parent_names {
+            for parent in parent_names.clone() {
 
                 //self.graph.add_node(parent.clone().function_name.clone());
                 let mut did_find_important_node = false;
@@ -196,15 +196,14 @@ impl Analyzer {
 
                 search_grandparents -= 1;
             }
-        } else {
-            if has_parent_filter {
-                for parent in parent_names.clone() {
-                    for name in parent.function_name.clone() {
-                        self.graph.add_node(name, 1);
-                    }
+        }
+        if has_parent_filter {
+            for parent in parent_names.clone() {
+                for name in parent.function_name.clone() {
+                    self.graph.add_node(name, 1);
                 }
-                parents = parent_names;
             }
+            parents = parent_names;
         }
         (parents, 0)
     }
