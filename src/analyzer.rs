@@ -202,6 +202,23 @@ impl Analyzer {
                 }
             }
             parents = parent_names;
+        } else {
+            for parent in parents.clone() {
+                for node in self.graph.nodes.clone() {
+                    if parent.function_name.contains(&node.name.clone()) {
+                        for edge in self.graph.pet_graph.edge_indices() {
+                            if self.graph.pet_graph.edge_weight(edge).is_some() {
+                                let endpoints = self.graph.pet_graph.edge_endpoints(edge).unwrap();
+                                if endpoints.0 == endpoints.1 {
+                                    if self.graph.pet_graph.node_weight(endpoints.0).unwrap().to_owned() == node.name {
+                                        self.graph.pet_graph.remove_edge(edge);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         (parents, 0)
     }
