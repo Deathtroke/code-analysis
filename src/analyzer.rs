@@ -135,7 +135,7 @@ impl Analyzer {
                 let mut matched_parents: HashSet<String> = HashSet::new();
                 for child in child_names.to_owned() {
                     let connections = parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server);
-                    for is_match in connections {
+                    for is_match in connections.clone() {
                         matched_parents.insert(is_match.0.clone());
                         self.graph.add_node(is_match.0.clone(), 1);
                         self.graph.add_node(is_match.1.clone(), 1);
@@ -150,7 +150,7 @@ impl Analyzer {
                     for child in child_names.clone() {
                         for node in self.graph.nodes.clone() {
                             if child.function_name.contains(&node.name.clone()) {
-                                if node.priority == 2 {
+                                if node.priority < 2 {
                                     for node_index in self.graph.pet_graph.node_indices() {
                                         if self.graph.pet_graph.node_weight(node_index).is_some() {
                                             if self.graph.pet_graph.node_weight(node_index).unwrap().to_owned() == node.name {

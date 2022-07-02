@@ -3,7 +3,8 @@ use crate::lang_server;
 use lsp_types::{DocumentSymbolResponse, Range, SymbolKind};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
-use std::fs;
+use std::fmt::{Debug, Formatter};
+use std::{fmt, fs};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
@@ -77,6 +78,15 @@ impl Clone for FunctionNode {
     }
 }
 
+impl fmt::Debug for FunctionNode{
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FunctionNode")
+            .field("functions", &self.function_name)
+            .field("match srtategy", &self.match_strategy.get_implementation())
+            .finish()
+    }
+}
+
 pub trait MatchFunctionEdge {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)>;
     fn get_implementation(&self) -> String;
@@ -111,6 +121,15 @@ impl MatchFunctionEdge for ForcedNode {
 
 impl MatchFunctionEdge for ParentChildNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)> {
+        if match_target.match_strategy.get_implementation() == "ForcedEdge".to_string(){
+            let mut result = HashSet::new();
+            for child in match_target.function_name.clone() {
+                for parent in self.function_name.clone() {
+                    result.insert((parent.clone(), child.clone()));
+                }
+            }
+            return result
+        }
         lsp_server.find_link(
             self.function_name.clone(),
             match_target.function_name.clone(),

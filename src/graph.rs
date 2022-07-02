@@ -60,7 +60,7 @@ impl Graph {
         if !edge_exists {
             self.pet_graph.add_edge(start_node, end_node, ());
             for node in self.nodes.clone() {
-                if (node.name == start.clone()) || (node.name == end.clone()) {
+                if (node.name == end.clone()) {
                     let new_prio = node.priority + 1;
                     let new_node = Node{name: node.name.clone(), priority: new_prio};
                     self.nodes.remove(&node.clone());
