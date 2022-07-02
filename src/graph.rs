@@ -9,7 +9,7 @@ pub struct Graph {
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
 pub struct Node {
     pub name: String,
-    pub priority: u32,
+    pub times_used: u32,
 }
 
 impl Graph {
@@ -34,7 +34,7 @@ impl Graph {
         }
         if !node_exists {
             self.pet_graph.add_node(node_name.clone());
-            let node = Node{name: node_name.clone(), priority: prio};
+            let node = Node{name: node_name.clone(), times_used: prio};
             self.nodes.insert(node);
         }
     }
@@ -61,8 +61,8 @@ impl Graph {
             self.pet_graph.add_edge(start_node, end_node, ());
             for node in self.nodes.clone() {
                 if (node.name == end.clone()) {
-                    let new_prio = node.priority + 1;
-                    let new_node = Node{name: node.name.clone(), priority: new_prio};
+                    let new_prio = node.times_used + 1;
+                    let new_node = Node{name: node.name.clone(), times_used: new_prio};
                     self.nodes.remove(&node.clone());
                     self.nodes.insert(new_node);
                 }

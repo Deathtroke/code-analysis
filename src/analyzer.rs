@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::string::String;
-use actix_server::new;
 use super::*;
 
 use regex::Regex;
@@ -150,7 +149,7 @@ impl Analyzer {
                     for child in child_names.clone() {
                         for node in self.graph.nodes.clone() {
                             if child.function_name.contains(&node.name.clone()) {
-                                if node.priority < 2 {
+                                if node.times_used < 2 {
                                     for node_index in self.graph.pet_graph.node_indices() {
                                         if self.graph.pet_graph.node_weight(node_index).is_some() {
                                             if self.graph.pet_graph.node_weight(node_index).unwrap().to_owned() == node.name {
