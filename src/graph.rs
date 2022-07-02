@@ -71,6 +71,40 @@ impl Graph {
         self.pet_graph.neighbors(end_node).next().is_some()
     }
 
+    pub fn remove_node(&mut self, node: Node){
+        for node_index in self.pet_graph.node_indices() {
+            if self.pet_graph.node_weight(node_index).is_some() {
+                if self.pet_graph.node_weight(node_index).unwrap().to_owned() == node.name {
+                    let edges = self.pet_graph.raw_edges().to_owned();
+                    let mut to_nodes: HashSet<String> = HashSet::new();
+                    for edge in edges{
+                        if edge.source() == node_index && edge.target() != edge.source() {
+                            to_nodes.insert(self.pet_graph.node_weight(edge.target()).unwrap().to_owned());
+                        }
+                    }
+
+                    self.nodes.remove(&node);
+                    self.pet_graph.remove_node(node_index);
+
+                    for to_node_string in to_nodes {
+                        for to_node in self.nodes.clone() {
+                            if to_node.name == to_node_string {
+                                let new_prio = to_node.times_used - 1;
+                                let new_node = Node { name: to_node.name.clone(), times_used: new_prio };
+                                self.nodes.remove(&to_node.clone());
+                                self.nodes.insert(new_node.clone());
+
+                                if new_prio <= 1 {
+                                    self.remove_node(new_node);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn graph_to_dot(&mut self) -> String {
         format!("{:?}",  petgraph::dot::Dot::new(&self.pet_graph.clone()))
     }

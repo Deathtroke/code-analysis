@@ -150,14 +150,7 @@ impl Analyzer {
                         for node in self.graph.nodes.clone() {
                             if child.function_name.contains(&node.name.clone()) {
                                 if node.times_used < 2 {
-                                    for node_index in self.graph.pet_graph.node_indices() {
-                                        if self.graph.pet_graph.node_weight(node_index).is_some() {
-                                            if self.graph.pet_graph.node_weight(node_index).unwrap().to_owned() == node.name {
-                                                self.graph.pet_graph.remove_node(node_index);
-                                            }
-                                            self.graph.nodes.remove(&node);
-                                        }
-                                    }
+                                    self.graph.remove_node(node.clone());
                                 }
                             }
                         }
