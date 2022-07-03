@@ -564,7 +564,7 @@ impl LSPServer for ClangdServer {
                 if file_filter.is_match(file.as_str()) {
                     for function in document.1.clone() {
                         let mut found = false;
-                        if only_ident == true {
+                        if only_ident {
                             if ident == function {
                                 found = true
                             }
@@ -579,6 +579,9 @@ impl LSPServer for ClangdServer {
                     }
                 }
             }
+            if function_names.len() == 0 && only_ident {
+                function_names.insert(ident);
+            }
             if function_names.len() > 0 {
                 if forced {
                     let node = ForcedNode {
@@ -591,16 +594,6 @@ impl LSPServer for ClangdServer {
                     };
                     func_nodes.insert(FunctionNode { function_name: function_names.clone(), match_strategy: Box::new(node) });
                 }
-            }
-
-            if func_nodes.len() == 0 && function_filter.as_str() != "." {
-                let mut hash_set = HashSet::new();
-                hash_set.insert(function_filter.as_str().to_string());
-                let node = ParentChildNode {
-                    function_name: hash_set,
-                };
-                func_nodes.insert(FunctionNode{function_name: node.function_name.clone(), match_strategy: Box::new(node)});
-
             }
         }
 
