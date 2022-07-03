@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use petgraph::graph::NodeIndex;
 
 pub struct Graph {
-    pub pet_graph: petgraph::Graph<String, ()>,
+    pub pet_graph: petgraph::Graph<String, String>,
     pub(crate) nodes: HashSet<Node>,
 }
 
@@ -58,7 +58,7 @@ impl Graph {
             edge_exists = true;
         }
         if !edge_exists {
-            self.pet_graph.add_edge(start_node, end_node, ());
+            self.pet_graph.add_edge(start_node, end_node, String::new());
             for node in self.nodes.clone() {
                 if (node.name == end.clone()) {
                     let new_prio = node.times_used + 1;
