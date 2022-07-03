@@ -133,7 +133,7 @@ impl Analyzer {
                 let mut did_find_important_node = false;
                 let mut matched_parents: HashSet<String> = HashSet::new();
                 for child in child_names.to_owned() {
-                    let connections = parent.clone().match_strategy.do_match(child.to_owned(), &mut self.lang_server);
+                    let connections = child.clone().match_strategy.do_match(parent.to_owned(), &mut self.lang_server);
                     for is_match in connections.clone() {
                         matched_parents.insert(is_match.0.clone());
                         self.graph.add_node(is_match.0.clone(), 1);

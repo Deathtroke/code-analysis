@@ -121,18 +121,9 @@ impl MatchFunctionEdge for ForcedNode {
 
 impl MatchFunctionEdge for ParentChildNode {
     fn do_match(&mut self, match_target: FunctionNode, lsp_server: &mut Box<dyn LSPServer>) -> HashSet<(String, String)> {
-        if match_target.match_strategy.get_implementation() == "ForcedEdge".to_string(){
-            let mut result = HashSet::new();
-            for child in match_target.function_name.clone() {
-                for parent in self.function_name.clone() {
-                    result.insert((parent.clone(), child.clone()));
-                }
-            }
-            return result
-        }
         lsp_server.find_link(
-            self.function_name.clone(),
             match_target.function_name.clone(),
+            self.function_name.clone()
         )
     }
     fn get_implementation(&self) -> String{
