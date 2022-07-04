@@ -382,17 +382,17 @@ impl ClangdServer {
                                 let hierarchy_item = self.lang_server.call_hierarchy_item(&document, symbol.range.start).unwrap().unwrap()[0].clone();
                                 let finish = Utc::now().time();
                                 let diff = finish-start;
-                                eprintln!("lsp: call_hierarchy_item: {:?}", diff.num_milliseconds());
+                                eprintln!("lsp: call_hierarchy_item: {:?}", diff.num_nanoseconds());
                                 let start = Utc::now().time();
                                 self.lang_server.call_hierarchy_item_incoming(hierarchy_item.clone());
                                 let finish = Utc::now().time();
                                 let diff = finish-start;
-                                eprintln!("lsp: call_hierarchy_item_incomming: {:?}", diff.num_milliseconds());
+                                eprintln!("lsp: call_hierarchy_item_incomming: {:?}", diff.num_nanoseconds());
                                 let start = Utc::now().time();
                                 self.lang_server.call_hierarchy_item_outgoing(hierarchy_item);
                                 let finish = Utc::now().time();
                                 let diff = finish-start;
-                                eprintln!("lsp: call_hierarchy_item_outgoing: {:?}", diff.num_milliseconds());
+                                eprintln!("lsp: call_hierarchy_item_outgoing: {:?}", diff.num_nanoseconds());
 
                             }
                             None => {}
