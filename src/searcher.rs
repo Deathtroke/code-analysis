@@ -106,8 +106,8 @@ impl MatchFunctionEdge for ForcedNode {
         #[allow(dead_code)]
         if false { drop(lsp_server); unimplemented!()}
         let mut result = HashSet::new();
-        for child in match_target.function_name.clone() {
-            for parent in self.function_name.clone() {
+        for child in self.function_name.clone() {
+            for parent in match_target.function_name.clone() {
                 result.insert((parent.clone(), child.clone()));
             }
         }
@@ -318,7 +318,7 @@ impl ClangdServer {
                 let mut functions:Vec<String> = vec![];
                 let mut ranges: Vec<Range> = vec![];
 
-                if i >= 1 {
+                if i >= 5 {
                     //break;
                     i = 0;
                     eprintln!("indexing project, please wait ({}/{})", i_total, files.clone().len());
@@ -448,13 +448,27 @@ impl ClangdServer {
                                 for func_name in func_names {
                                     let search_name = func_name.clone() + "(";
                                     if function_data.contains(&search_name) {
-                                        called_functions.push(func_name.clone());
-                                        let mut caller_function: Vec<String> = Vec::new();
-                                        if self.inv_function_index.contains_key(func_name.clone().as_str()) {
-                                            caller_function = self.inv_function_index.get(func_name.clone().as_str()).unwrap().to_owned();
+                                        let mut ignore = false;
+                                        let find = function_data.find("#");
+                                        if find.is_some() {
+                                            if find.unwrap() != 0 {
+                                                let name_i = function_data.find(&search_name).unwrap();
+                                                if find.unwrap() < name_i &&
+                                                    !(function_data[find.unwrap()..name_i].contains("\n")||
+                                                        function_data[find.unwrap()..name_i].contains("\t")) {
+                                                    ignore = true;
+                                                }
+                                            }
                                         }
-                                        caller_function.push(name.clone());
-                                        self.inv_function_index.insert(func_name.clone(), caller_function.clone());
+                                        if !ignore {
+                                            called_functions.push(func_name.clone());
+                                            let mut caller_function: Vec<String> = Vec::new();
+                                            if self.inv_function_index.contains_key(func_name.clone().as_str()) {
+                                                caller_function = self.inv_function_index.get(func_name.clone().as_str()).unwrap().to_owned();
+                                            }
+                                            caller_function.push(name.clone());
+                                            self.inv_function_index.insert(func_name.clone(), caller_function.clone());
+                                        }
                                     }
                                 }
                             }

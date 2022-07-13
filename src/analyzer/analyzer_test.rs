@@ -75,8 +75,8 @@ fn test_parser_simple1() {
     parser.parse(input);
 
     let graph_output = HashSet::from([
-        ("func".to_string(), "parent1".to_string()),
-        ("func".to_string(), "parent2".to_string()),
+        ("parent1".to_string(), "func".to_string()),
+        ("parent2".to_string(), "func".to_string()),
     ]);
 
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
@@ -90,8 +90,10 @@ fn test_parser() {
     parser.parse(input);
 
     let graph_output = HashSet::from([
-        ("func".to_string(), "parent1".to_string()),
-        ("func".to_string(), "parent2".to_string()),
+        ("parent1".to_string(), "func".to_string()),
+        ("parent2".to_string(), "func".to_string()),
+        ("parent1".to_string(), "parent2".to_string()),
+        ("parent2".to_string(), "parent1".to_string()),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
     //let g : tabbycat::Graph = analyzer.graph.try_into().unwrap();
