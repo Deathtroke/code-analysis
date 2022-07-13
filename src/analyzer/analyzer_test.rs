@@ -54,7 +54,13 @@ impl LSPServer for MockLSPServer {
     }
 
     fn find_link(&mut self, parent_name: HashSet<String>, child_name: HashSet<String>) -> HashSet<(String, String)> {
-        unimplemented!("{:?} {:?}", parent_name, child_name);
+        let mut result: HashSet<(String, String)> = HashSet::new();
+        for parent in parent_name.clone() {
+            for child in child_name.clone() {
+                result.insert((parent.clone(), child.clone()));
+            }
+        }
+        result
     }
 
     fn close(&mut self) {
@@ -69,8 +75,8 @@ fn test_parser_simple1() {
     parser.parse(input);
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), "func".to_string()),
-        ("parent2".to_string(), "func".to_string()),
+        ("func".to_string(), "parent1".to_string()),
+        ("func".to_string(), "parent2".to_string()),
     ]);
 
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
@@ -84,12 +90,8 @@ fn test_parser() {
     parser.parse(input);
 
     let graph_output = HashSet::from([
-        ("parent1".to_string(), "func".to_string()),
-        ("parent1".to_string(), "parent1".to_string()),
-        ("parent1".to_string(), "parent2".to_string()),
-        ("parent2".to_string(), "func".to_string()),
-        ("parent2".to_string(), "parent1".to_string()),
-        ("parent2".to_string(), "parent2".to_string()),
+        ("func".to_string(), "parent1".to_string()),
+        ("func".to_string(), "parent2".to_string()),
     ]);
     assert_eq!(parser.graph.graph_to_tuple(), graph_output);
     //let g : tabbycat::Graph = analyzer.graph.try_into().unwrap();

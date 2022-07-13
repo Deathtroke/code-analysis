@@ -53,7 +53,7 @@ fn try_main() -> anyhow::Result<()> {
     if opt.benchmark {
         let now = Utc::now().time();
         let diff = now - start;
-        eprintln!("Time till parsing is finished: {} ms", diff.num_milliseconds());
+        eprintln!("Time till parsing is finished: {} ns", diff.num_microseconds().unwrap());
     }
 
     let mut out: Box<dyn std::io::Write> = if let Some(filename) = opt.output {

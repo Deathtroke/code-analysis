@@ -8,7 +8,7 @@ use std::{fmt, fs};
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::prelude::*;
-use chrono::Utc;
+use chrono::{NaiveTime, Utc};
 use log::{Level, log};
 use serde_json::Value;
 use crate::analyzer::FilterName;
@@ -31,7 +31,7 @@ pub struct ClangdServer {
     inv_function_index: HashMap<String, Vec<String>>,
     use_call_hierarchy_outgoing: bool,
     clangd_path: String,
-    benchmark: bool,
+    benchmark: (NaiveTime, bool),
 }
 
 pub struct FunctionNode {
@@ -146,7 +146,7 @@ impl ClangdServer {
             inv_function_index: Default::default(),
             use_call_hierarchy_outgoing: true,
             clangd_path,
-            benchmark: benchmark.1
+            benchmark: benchmark
         };
         let res = lsp_server.lang_server.initialize();
         if res.is_err() {
@@ -157,6 +157,7 @@ impl ClangdServer {
             let now = Utc::now().time();
             let diff = now - benchmark.0;
             eprintln!("Time till index is finished: {} ms", diff.num_milliseconds());
+            eprintln!("number of functions: {}", lsp_server.function_index.len())
         }
         Box::new(lsp_server)
     }
@@ -197,6 +198,8 @@ impl ClangdServer {
             self.index_map = self.check_index_file(files.clone());
         } else {
             files = self.get_files_in_dir(self.project_path.clone(), self.project_path.clone(), None);
+            self.index_map = self.check_index_file(files.clone());
+
 
         }
         files
@@ -306,7 +309,6 @@ impl ClangdServer {
 
         }
 
-
         if needs_indexing {
             let mut i = 0;
             let mut i_total = 0;
@@ -316,25 +318,30 @@ impl ClangdServer {
                 let mut functions:Vec<String> = vec![];
                 let mut ranges: Vec<Range> = vec![];
 
-                if i >= 10 {
+                if i >= 1 {
                     //break;
                     i = 0;
                     eprintln!("indexing project, please wait ({}/{})", i_total, files.clone().len());
+                    if self.benchmark.1 {
+                        let now = Utc::now().time();
+                        let diff = now - self.benchmark.0;
+                        eprintln!("time till now: {:?}", diff.num_milliseconds());
+                    }
                     self.restart_server();
                 }
                 let start = Utc::now().time();
                 let document_res = self.lang_server.document_open(file.as_str());
-                if self.benchmark {
+                if self.benchmark.1 {
                     let finish = Utc::now().time();
                     let diff = finish-start;
-                    eprintln!("lsp: document_open: {:?}", diff.num_milliseconds());
+                    eprintln!("lsp: document_open: {:?}ns", diff.num_nanoseconds().unwrap());
                 }
                 if document_res.is_ok() {
                     let document = document_res.unwrap();
 
                     let start = Utc::now().time();
                     let doc_symbol = self.lang_server.document_symbol(&document);
-                    if self.benchmark {
+                    if self.benchmark.1 {
                         let finish = Utc::now().time();
                         let diff = finish-start;
                         eprintln!("lsp: document_symbol: {:?}", diff.num_milliseconds());
@@ -367,7 +374,7 @@ impl ClangdServer {
                 index_map.insert(file.clone(), functions);
                 range_index.insert(file.clone(), ranges);
             }
-            if self.benchmark {
+            if self.benchmark.1 {
                 let document_res = self.lang_server.document_open("/criu/fsnotify.c");
                 if document_res.is_ok() {
                     let document = document_res.unwrap();
