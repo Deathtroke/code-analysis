@@ -176,8 +176,8 @@ impl Analyzer {
                 grand_children = self.lang_server.find_func_name(child_filter);
 
 
-                for grand_child in grand_children {
-                    let connections = parent.match_strategy.do_match(grand_child.clone(), &mut self.lang_server);
+                for mut grand_child in grand_children {
+                    let connections = grand_child.match_strategy.do_match(parent.clone(), &mut self.lang_server);
                     for connection in connections.clone() {
                         new_child_list.insert(connection.1.clone());
 
